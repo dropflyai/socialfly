@@ -1,0 +1,389 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * SOCIALSYNC EMPIRE - UNIQUE DESIGN SYSTEM
+ *
+ * Brand Attributes: Connected, Intelligent, Fast, Empowering, Trustworthy
+ * Primary: Violet (#7C3AED) - Creativity, distinction, premium
+ * Secondary: Teal (#14B8A6) - Connected, modern, trustworthy
+ *
+ * Differentiator: Purple+Teal vs competition (Buffer=orange, Later=lime, Hootsuite=blue)
+ */
+
+@layer base {
+  :root {
+    /* Core Palette - Violet Primary */
+    --background: 0 0% 99%;
+    --foreground: 250 25% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 250 25% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 250 25% 10%;
+
+    /* Primary: Violet - for CTAs and focus */
+    --primary: 263 70% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary: Soft violet tint */
+    --secondary: 263 30% 96%;
+    --secondary-foreground: 263 70% 35%;
+
+    /* Accent: Teal - for success and positive actions */
+    --accent: 168 76% 42%;
+    --accent-foreground: 0 0% 100%;
+
+    /* Muted backgrounds */
+    --muted: 250 15% 95%;
+    --muted-foreground: 250 10% 45%;
+
+    /* Destructive */
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Borders - subtle, not heavy */
+    --border: 250 15% 90%;
+    --input: 250 15% 90%;
+    --ring: 263 70% 50%;
+    --radius: 0.75rem;
+
+    /* Sidebar - slightly tinted */
+    --sidebar-background: 263 20% 98%;
+    --sidebar-foreground: 250 25% 20%;
+    --sidebar-primary: 263 70% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 263 30% 94%;
+    --sidebar-accent-foreground: 263 70% 35%;
+    --sidebar-border: 263 15% 92%;
+    --sidebar-ring: 263 70% 50%;
+  }
+
+  .dark {
+    /* Dark mode - Deep violet-tinted blacks */
+    --background: 250 30% 7%;
+    --foreground: 0 0% 95%;
+    --card: 250 25% 10%;
+    --card-foreground: 0 0% 95%;
+    --popover: 250 25% 10%;
+    --popover-foreground: 0 0% 95%;
+
+    /* Primary stays vibrant */
+    --primary: 263 70% 58%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary: Dark violet */
+    --secondary: 263 30% 18%;
+    --secondary-foreground: 263 50% 80%;
+
+    /* Accent: Teal stays vibrant */
+    --accent: 168 76% 46%;
+    --accent-foreground: 0 0% 100%;
+
+    /* Muted - dark with violet tint */
+    --muted: 250 20% 15%;
+    --muted-foreground: 250 10% 55%;
+
+    /* Destructive */
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Borders - subtle in dark */
+    --border: 250 20% 18%;
+    --input: 250 20% 18%;
+    --ring: 263 70% 58%;
+
+    /* Sidebar */
+    --sidebar-background: 250 30% 8%;
+    --sidebar-foreground: 0 0% 90%;
+    --sidebar-primary: 263 70% 58%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 263 30% 18%;
+    --sidebar-accent-foreground: 263 50% 80%;
+    --sidebar-border: 250 20% 15%;
+    --sidebar-ring: 263 70% 58%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+  }
+}
+
+/*
+ * TYPOGRAPHY SYSTEM
+ * Using Plus Jakarta Sans - geometric, modern, premium feel
+ * Not default Inter - stands out from generic SaaS
+ */
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* Large headings get tighter tracking */
+.text-3xl, .text-4xl, .text-5xl {
+  letter-spacing: -0.03em;
+}
+
+/* Code/Mono */
+code, .font-mono {
+  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+}
+
+/*
+ * FOCUS & INTERACTION STATES
+ * Visible, accessible, on-brand
+ */
+
+:focus-visible {
+  @apply outline-none ring-2 ring-primary/50 ring-offset-2 ring-offset-background;
+}
+
+/* Primary button glow effect */
+.btn-primary-glow {
+  box-shadow: 0 0 20px -5px hsl(var(--primary) / 0.4);
+}
+
+.btn-primary-glow:hover {
+  box-shadow: 0 0 30px -5px hsl(var(--primary) / 0.5);
+}
+
+/*
+ * CUSTOM SCROLLBAR - Minimal, on-brand
+ */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-primary/20 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-primary/30;
+}
+
+/*
+ * ANIMATIONS - Smooth, purposeful
+ */
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px -5px hsl(var(--primary) / 0.3);
+  }
+  50% {
+    box-shadow: 0 0 30px -5px hsl(var(--primary) / 0.5);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.2s ease-out;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/*
+ * GRADIENT UTILITIES - Brand signature
+ */
+
+.gradient-primary {
+  background: linear-gradient(135deg, hsl(263 70% 50%) 0%, hsl(280 70% 55%) 100%);
+}
+
+.gradient-accent {
+  background: linear-gradient(135deg, hsl(168 76% 42%) 0%, hsl(180 70% 45%) 100%);
+}
+
+.gradient-dark {
+  background: linear-gradient(180deg, hsl(250 30% 7%) 0%, hsl(250 25% 12%) 100%);
+}
+
+/* Text gradient */
+.text-gradient-primary {
+  background: linear-gradient(135deg, hsl(263 70% 55%) 0%, hsl(280 70% 60%) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/*
+ * PLATFORM COLORS - Social media icons
+ */
+
+.platform-instagram {
+  background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+}
+
+.platform-tiktok {
+  background: linear-gradient(135deg, #000000 0%, #25F4EE 50%, #FE2C55 100%);
+}
+
+.platform-twitter {
+  @apply bg-black;
+}
+
+.platform-linkedin {
+  @apply bg-[#0A66C2];
+}
+
+.platform-facebook {
+  @apply bg-[#1877F2];
+}
+
+.platform-youtube {
+  @apply bg-[#FF0000];
+}
+
+/*
+ * STATUS INDICATORS
+ */
+
+.status-success {
+  @apply bg-teal-500;
+}
+
+.status-warning {
+  @apply bg-amber-500;
+}
+
+.status-error {
+  @apply bg-red-500;
+}
+
+.status-pending {
+  @apply bg-violet-400;
+}
+
+.status-active {
+  @apply bg-teal-500;
+}
+
+/*
+ * GLASS MORPHISM - Premium feel
+ */
+
+.glass {
+  background: hsl(var(--background) / 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.dark .glass {
+  background: hsl(var(--card) / 0.8);
+}
+
+/*
+ * CARD VARIANTS - Not all cards look the same
+ */
+
+.card-elevated {
+  @apply bg-card shadow-lg shadow-primary/5 border-0;
+}
+
+.card-interactive {
+  @apply bg-card border border-border hover:border-primary/30 hover:shadow-lg hover:shadow-primary/10 transition-all cursor-pointer;
+}
+
+.card-highlight {
+  @apply bg-gradient-to-br from-primary/5 to-primary/10 border border-primary/20;
+}
+
+/*
+ * SPACING UTILITIES (Design Brain scale: 4/8/12/16/24/32/48/64)
+ */
+
+.section-gap {
+  @apply space-y-8;
+}
+
+.content-gap {
+  @apply space-y-6;
+}
+
+.tight-gap {
+  @apply space-y-4;
+}
+
+/*
+ * SKELETON LOADING - On-brand
+ */
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 0%,
+    hsl(var(--muted-foreground) / 0.1) 50%,
+    hsl(var(--muted)) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
