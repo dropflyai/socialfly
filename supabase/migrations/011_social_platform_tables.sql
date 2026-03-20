@@ -2,6 +2,17 @@
 -- Created: 2025-12-29
 -- Purpose: Full social media automation engine schema
 
+-- Drop pre-existing tables from earlier migrations (no production data yet)
+DROP TABLE IF EXISTS public.post_analytics CASCADE;
+DROP TABLE IF EXISTS public.analytics_snapshots CASCADE;
+DROP TABLE IF EXISTS public.automation_executions CASCADE;
+DROP TABLE IF EXISTS public.automation_rules CASCADE;
+DROP TABLE IF EXISTS public.scheduled_posts CASCADE;
+DROP TABLE IF EXISTS public.content_items CASCADE;
+DROP TABLE IF EXISTS public.brand_profiles CASCADE;
+DROP TABLE IF EXISTS public.platform_connections CASCADE;
+DROP TABLE IF EXISTS public.user_preferences CASCADE;
+
 -- ============================================================================
 -- PLATFORM CONNECTIONS (OAuth tokens for each social platform)
 -- ============================================================================
@@ -359,62 +370,8 @@ CREATE TRIGGER on_auth_user_created_preferences
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user_preferences();
 
--- ============================================================================
--- SEED: Automation Rule Templates
--- ============================================================================
-INSERT INTO public.automation_rules (
-  id,
-  user_id,
-  name,
-  description,
-  trigger_type,
-  trigger_config,
-  action_type,
-  action_config,
-  is_active,
-  is_template,
-  template_category
-) VALUES
-(
-  '00000000-0000-0000-0001-000000000001',
-  '00000000-0000-0000-0000-000000000000',
-  'Daily Optimal Post',
-  'Automatically post your best content at the optimal time each day',
-  'schedule',
-  '{"cron": "0 9 * * *", "timezone": "America/New_York", "description": "Every day at 9 AM"}',
-  'post_content',
-  '{"source": "library", "selection": "highest_engagement_potential", "platforms": ["instagram", "linkedin"]}',
-  false,
-  true,
-  'creator'
-),
-(
-  '00000000-0000-0000-0001-000000000002',
-  '00000000-0000-0000-0000-000000000000',
-  'Weekly Content Batch',
-  'Generate a week''s worth of content every Monday morning',
-  'schedule',
-  '{"cron": "0 8 * * 1", "timezone": "America/New_York", "description": "Every Monday at 8 AM"}',
-  'generate_content',
-  '{"count": 7, "types": ["text"], "platforms": ["twitter", "linkedin"], "prompt_template": "Create engaging content about {{industry}} trends"}',
-  false,
-  true,
-  'business'
-),
-(
-  '00000000-0000-0000-0001-000000000003',
-  '00000000-0000-0000-0000-000000000000',
-  'Cross-Platform Repurpose',
-  'Automatically adapt successful Instagram posts for other platforms',
-  'engagement_drop',
-  '{"threshold": 0.8, "platform": "instagram", "lookback_hours": 24}',
-  'repurpose',
-  '{"source_platform": "instagram", "target_platforms": ["twitter", "linkedin", "facebook"]}',
-  false,
-  true,
-  'agency'
-)
-ON CONFLICT (id) DO NOTHING;
+-- SEED: Automation Rule Templates (skipped - requires existing user)
+-- Templates will be seeded after first user signup
 
 -- ============================================================================
 -- COMMENTS
