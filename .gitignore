@@ -45,3 +45,4 @@ credentials/
 
 # Misc
 *.log
+.env*.local

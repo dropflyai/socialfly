@@ -1,131 +1,104 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { NextRequest, NextResponse } from 'next/server'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { fal } from '@fal-ai/client'
 
-/**
- * Video Generation API Endpoint
- * POST /api/video/generate
- */
+fal.config({ credentials: process.env.FAL_KEY })
+
+type VideoModel = 'fast' | 'quality'
+
+const MODEL_CONFIG: Record<VideoModel, { id: string; label: string }> = {
+  fast: { id: 'fal-ai/ltx-video', label: 'LTX Video (Fast, ~$0.02)' },
+  quality: { id: 'fal-ai/minimax-video', label: 'Minimax Video (Quality, ~$0.50)' },
+}
+
 export async function POST(request: NextRequest) {
+  const supabase = await createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { prompt, imageUrl, model = 'fast' } = await request.json()
+
+  if (!prompt) {
+    return NextResponse.json({ error: 'Missing prompt' }, { status: 400 })
+  }
+
+  const modelKey = (model as VideoModel) in MODEL_CONFIG ? model as VideoModel : 'fast'
+  const config = MODEL_CONFIG[modelKey]
+
   try {
-    // Get user from auth header
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader) {
-      return NextResponse.json(
-        { error: 'Missing authorization header' },
-        { status: 401 }
-      );
-    }
+    let result
 
-    const token = authHeader.replace('Bearer ', '');
-
-    // Create Supabase client with service role for auth validation
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
+    if (imageUrl) {
+      // Image-to-video
+      if (modelKey === 'fast') {
+        result = await fal.subscribe('fal-ai/ltx-video/image-to-video', {
+          input: {
+            prompt,
+            image_url: imageUrl,
+            num_inference_steps: 30,
+            guidance_scale: 3,
+          },
+        })
+      } else {
+        result = await fal.subscribe('fal-ai/minimax-video/image-to-video', {
+          input: {
+            prompt,
+            image_url: imageUrl,
+            prompt_optimizer: true,
+          },
+        })
       }
-    );
-
-    // Verify user token
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Invalid authentication token' },
-        { status: 401 }
-      );
+    } else {
+      // Text-to-video
+      if (modelKey === 'fast') {
+        result = await fal.subscribe('fal-ai/ltx-video', {
+          input: {
+            prompt,
+            num_inference_steps: 30,
+            guidance_scale: 3,
+          },
+        })
+      } else {
+        result = await fal.subscribe('fal-ai/minimax-video', {
+          input: {
+            prompt,
+            prompt_optimizer: true,
+          },
+        })
+      }
     }
 
-    // Get request body
-    const body = await request.json();
-    const { prompt, engine = 'fal-ai/minimax-video' } = body;
+    // Extract video URL -- different models return different shapes
+    const data = result.data as Record<string, unknown>
+    let videoUrl: string | undefined
 
-    if (!prompt) {
-      return NextResponse.json(
-        { error: 'Missing prompt' },
-        { status: 400 }
-      );
+    // minimax: { video: { url } }
+    if (data.video && typeof data.video === 'object' && 'url' in (data.video as Record<string, unknown>)) {
+      videoUrl = (data.video as { url: string }).url
+    }
+    // ltx-video: { video: { url } } or top-level url
+    if (!videoUrl && data.url && typeof data.url === 'string') {
+      videoUrl = data.url
     }
 
-    // Check token balance
-    const { data: tokenData, error: tokenError } = await supabase
-      .from('token_balances')
-      .select('balance')
-      .eq('user_id', user.id)
-      .single();
-
-    if (tokenError || !tokenData) {
-      return NextResponse.json(
-        { error: 'Failed to check token balance' },
-        { status: 500 }
-      );
-    }
-
-    if (tokenData.balance < 10) {
-      return NextResponse.json(
-        { error: 'Insufficient tokens. Need at least 10 tokens.' },
-        { status: 402 }
-      );
-    }
-
-    console.log('Generating video with FAL.AI...');
-    console.log('Engine:', engine);
-    console.log('Prompt:', prompt);
-
-    // Call FAL.AI API
-    const falResponse = await fetch(`https://fal.run/${engine}`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Key ${process.env.FAL_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        prompt,
-      }),
-    });
-
-    if (!falResponse.ok) {
-      const errorText = await falResponse.text();
-      console.error('FAL.AI error:', errorText);
-      return NextResponse.json(
-        { error: 'Video generation failed', details: errorText },
-        { status: 500 }
-      );
-    }
-
-    const videoResult = await falResponse.json();
-
-    // Deduct tokens (10 tokens per video)
-    const { error: deductError } = await supabase
-      .from('token_balances')
-      .update({ balance: tokenData.balance - 10 })
-      .eq('user_id', user.id);
-
-    if (deductError) {
-      console.error('Failed to deduct tokens:', deductError);
+    if (!videoUrl) {
+      console.error('Unexpected video response shape:', JSON.stringify(data).slice(0, 500))
+      throw new Error('No video URL in response')
     }
 
     return NextResponse.json({
       success: true,
-      video: videoResult,
-      tokensUsed: 10,
-      remainingBalance: tokenData.balance - 10,
-    });
-
-  } catch (error: any) {
-    console.error('Video generation error:', error);
-
+      videoUrl,
+      model: config.label,
+    })
+  } catch (error) {
+    console.error('Video generation error:', error)
     return NextResponse.json(
-      {
-        success: false,
-        error: error.message || 'Internal server error',
-        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
-      },
+      { error: error instanceof Error ? error.message : 'Video generation failed' },
       { status: 500 }
-    );
+    )
   }
 }

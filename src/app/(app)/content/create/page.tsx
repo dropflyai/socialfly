@@ -56,6 +56,16 @@ function CreateContentContent() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState(defaultTab)
 
+  // Video state
+  const [videoPrompt, setVideoPrompt] = useState('')
+  const [generatedVideoUrl, setGeneratedVideoUrl] = useState('')
+  const [generatingVideo, setGeneratingVideo] = useState(false)
+  const [videoModel, setVideoModel] = useState<'fast' | 'quality'>('fast')
+  const [useImageForVideo, setUseImageForVideo] = useState(false)
+  const [videoImagePrompt, setVideoImagePrompt] = useState('')
+  const [videoImageUrl, setVideoImageUrl] = useState('')
+  const [generatingVideoImage, setGeneratingVideoImage] = useState(false)
+
   const togglePlatform = (platform: string) => {
     setSelectedPlatforms((prev) =>
       prev.includes(platform)
@@ -84,6 +94,57 @@ function CreateContentContent() {
       setError(err instanceof Error ? err.message : 'Image generation failed')
     } finally {
       setGeneratingImage(false)
+    }
+  }
+
+  const handleGenerateVideoImage = async () => {
+    if (!videoImagePrompt) return
+    setGeneratingVideoImage(true)
+    setError(null)
+
+    try {
+      const res = await fetch('/api/image/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: videoImagePrompt, aspectRatio: '9:16' }),
+      })
+
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Image generation failed')
+
+      setVideoImageUrl(data.imageUrl)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Image generation failed')
+    } finally {
+      setGeneratingVideoImage(false)
+    }
+  }
+
+  const handleGenerateVideo = async () => {
+    if (!videoPrompt) return
+    setGeneratingVideo(true)
+    setError(null)
+    setGeneratedVideoUrl('')
+
+    try {
+      const res = await fetch('/api/video/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: videoPrompt,
+          model: videoModel,
+          imageUrl: useImageForVideo && videoImageUrl ? videoImageUrl : undefined,
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Video generation failed')
+
+      setGeneratedVideoUrl(data.videoUrl)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Video generation failed')
+    } finally {
+      setGeneratingVideo(false)
     }
   }
 
@@ -128,6 +189,8 @@ function CreateContentContent() {
 
     try {
       const firstVariant = Object.values(generatedContent.variants)[0]
+      const mediaUrl = activeTab === 'video' ? generatedVideoUrl : currentImageUrl
+      const mediaType = activeTab === 'video' ? 'video' : mediaUrl ? 'image' : undefined
       const res = await fetch('/api/posts/publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -135,8 +198,8 @@ function CreateContentContent() {
           contentId: generatedContent.id,
           text: firstVariant.text,
           platforms: selectedPlatforms,
-          mediaUrls: currentImageUrl ? [currentImageUrl] : undefined,
-          mediaType: currentImageUrl ? 'image' : undefined,
+          mediaUrls: mediaUrl ? [mediaUrl] : undefined,
+          mediaType,
         }),
       })
 
@@ -160,6 +223,8 @@ function CreateContentContent() {
     try {
       const scheduledFor = new Date(`${scheduleDate}T${scheduleTime}`).toISOString()
       const firstVariant = Object.values(generatedContent.variants)[0]
+      const mediaUrl = activeTab === 'video' ? generatedVideoUrl : currentImageUrl
+      const mediaType = activeTab === 'video' ? 'video' : mediaUrl ? 'image' : undefined
 
       const res = await fetch('/api/posts/publish', {
         method: 'POST',
@@ -169,8 +234,8 @@ function CreateContentContent() {
           text: firstVariant.text,
           platforms: selectedPlatforms,
           scheduleFor: scheduledFor,
-          mediaUrls: currentImageUrl ? [currentImageUrl] : undefined,
-          mediaType: currentImageUrl ? 'image' : undefined,
+          mediaUrls: mediaUrl ? [mediaUrl] : undefined,
+          mediaType,
         }),
       })
 
@@ -248,7 +313,7 @@ function CreateContentContent() {
           </TabsTrigger>
           <TabsTrigger value="video" className="gap-2">
             <Video className="h-4 w-4" />
-            Video Script
+            Video Post
           </TabsTrigger>
         </TabsList>
 
@@ -414,39 +479,176 @@ function CreateContentContent() {
           </Card>
         </TabsContent>
 
-        {/* Video Script Tab */}
+        {/* Video Post Tab */}
         <TabsContent value="video" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>AI Video Script Writer</CardTitle>
+              <CardTitle>AI Video Post</CardTitle>
               <CardDescription>
-                Generate video scripts with hooks, body, and call-to-action
+                Generate a video with AI, then generate a caption to post it
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
+              {/* Model Selection */}
               <div className="space-y-2">
-                <Label htmlFor="video-prompt">Describe your video concept</Label>
+                <Label>Video Model</Label>
+                <div className="flex gap-3">
+                  <Button
+                    variant={videoModel === 'fast' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setVideoModel('fast')}
+                  >
+                    Fast (~$0.02)
+                  </Button>
+                  <Button
+                    variant={videoModel === 'quality' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setVideoModel('quality')}
+                  >
+                    Quality (~$0.50)
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {videoModel === 'fast'
+                    ? 'LTX Video -- fast generation, good for testing and drafts'
+                    : 'Minimax Video -- higher quality, better for final posts'}
+                </p>
+              </div>
+
+              {/* Optional: Generate starting image */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="use-image"
+                    checked={useImageForVideo}
+                    onChange={(e) => setUseImageForVideo(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  <Label htmlFor="use-image" className="cursor-pointer">
+                    Start from an AI-generated image (image-to-video)
+                  </Label>
+                </div>
+
+                {useImageForVideo && (
+                  <div className="space-y-3 pl-6 border-l-2 border-border">
+                    <textarea
+                      placeholder="Describe the starting image for your video..."
+                      className="w-full min-h-20 p-3 rounded-lg border bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                      value={videoImagePrompt}
+                      onChange={(e) => setVideoImagePrompt(e.target.value)}
+                    />
+                    <Button
+                      onClick={handleGenerateVideoImage}
+                      disabled={!videoImagePrompt || generatingVideoImage}
+                      size="sm"
+                      className="gap-2"
+                    >
+                      {generatingVideoImage ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Generating Image...
+                        </>
+                      ) : (
+                        <>
+                          <ImageIcon className="h-4 w-4" />
+                          Generate Starting Image
+                        </>
+                      )}
+                    </Button>
+                    {videoImageUrl && (
+                      <div className="rounded-lg overflow-hidden border bg-muted max-w-xs">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={videoImageUrl} alt="Starting frame" className="w-full h-auto" />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Video prompt */}
+              <div className="space-y-2">
+                <Label htmlFor="video-gen-prompt">Describe the video you want to generate</Label>
                 <textarea
-                  id="video-prompt"
-                  placeholder="e.g., A 30-second reel explaining how DropFly's AI handles phone calls for small businesses..."
-                  className="w-full min-h-32 p-3 rounded-lg border bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
+                  id="video-gen-prompt"
+                  placeholder="e.g., A smooth camera pan across a futuristic office, holographic screens showing AI voice agent dashboards, blue ambient lighting, cinematic quality..."
+                  className="w-full min-h-28 p-3 rounded-lg border bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                  value={videoPrompt}
+                  onChange={(e) => setVideoPrompt(e.target.value)}
                 />
               </div>
-              <Button onClick={handleGenerate} disabled={!prompt || !selectedPlatforms.length || generating} className="gap-2">
-                {generating ? (
+
+              <Button
+                onClick={handleGenerateVideo}
+                disabled={!videoPrompt || generatingVideo || (useImageForVideo && !videoImageUrl)}
+                className="gap-2"
+              >
+                {generatingVideo ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Generating...
+                    Generating Video...
                   </>
                 ) : (
                   <>
-                    <Sparkles className="h-4 w-4" />
-                    Generate Script
+                    <Video className="h-4 w-4" />
+                    Generate Video
                   </>
                 )}
               </Button>
+              {useImageForVideo && !videoImageUrl && videoPrompt && (
+                <p className="text-xs text-muted-foreground">Generate a starting image first</p>
+              )}
+
+              {/* Video Preview */}
+              {generatedVideoUrl && (
+                <div className="space-y-2">
+                  <Label>Video Preview</Label>
+                  <div className="rounded-lg overflow-hidden border bg-muted max-w-md">
+                    <video
+                      src={generatedVideoUrl}
+                      controls
+                      className="w-full h-auto"
+                      autoPlay
+                      muted
+                      loop
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Caption Generation */}
+              {generatedVideoUrl && (
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="video-caption-prompt">What should the caption be about?</Label>
+                    <textarea
+                      id="video-caption-prompt"
+                      placeholder="e.g., Showcase our AI technology and how it helps businesses automate customer calls..."
+                      className="w-full min-h-24 p-3 rounded-lg border bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                      value={prompt}
+                      onChange={(e) => setPrompt(e.target.value)}
+                    />
+                  </div>
+
+                  <Button
+                    onClick={handleGenerate}
+                    disabled={!prompt || !selectedPlatforms.length || generating}
+                    className="gap-2"
+                  >
+                    {generating ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Generating Caption...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-4 w-4" />
+                        Generate Caption
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -460,7 +662,8 @@ function CreateContentContent() {
             <div className="flex gap-2 flex-wrap">
               <Badge variant="secondary">{generatedContent.contentPillar}</Badge>
               <Badge variant="outline">{generatedContent.tokensUsed} tokens used</Badge>
-              {currentImageUrl && <Badge variant="secondary">With image</Badge>}
+              {currentImageUrl && activeTab !== 'video' && <Badge variant="secondary">With image</Badge>}
+              {generatedVideoUrl && activeTab === 'video' && <Badge variant="secondary">With video</Badge>}
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -475,12 +678,16 @@ function CreateContentContent() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    {currentImageUrl && (
+                    {generatedVideoUrl && activeTab === 'video' ? (
+                      <div className="rounded overflow-hidden border bg-muted">
+                        <video src={generatedVideoUrl} className="w-full h-32 object-cover" muted autoPlay loop />
+                      </div>
+                    ) : currentImageUrl ? (
                       <div className="rounded overflow-hidden border bg-muted">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={currentImageUrl} alt="Post image" className="w-full h-32 object-cover" />
                       </div>
-                    )}
+                    ) : null}
                     <p className="text-sm whitespace-pre-wrap">{variant.text}</p>
                     {variant.hashtags?.length > 0 && (
                       <div className="flex gap-1 flex-wrap">
