@@ -4,6 +4,9 @@ import { fal } from '@fal-ai/client'
 
 fal.config({ credentials: process.env.FAL_KEY })
 
+// Hobby: max 60s, Pro: max 300s
+export const maxDuration = 60
+
 type VideoModel = 'fast' | 'quality'
 
 const MODEL_CONFIG: Record<VideoModel, { id: string; label: string }> = {
