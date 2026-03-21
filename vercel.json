@@ -6,13 +6,13 @@
     }
   ],
   "functions": {
-    "api/video/generate/route.ts": {
+    "src/app/api/video/generate/route.ts": {
       "maxDuration": 300
     },
-    "api/image/generate/route.ts": {
+    "src/app/api/image/generate/route.ts": {
       "maxDuration": 60
     },
-    "api/content/generate/route.ts": {
+    "src/app/api/content/generate/route.ts": {
       "maxDuration": 60
     }
   }
