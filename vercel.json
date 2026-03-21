@@ -2,7 +2,18 @@
   "crons": [
     {
       "path": "/api/cron/publish",
-      "schedule": "0 9 * * *"
+      "schedule": "* * * * *"
     }
-  ]
+  ],
+  "functions": {
+    "api/video/generate/route.ts": {
+      "maxDuration": 300
+    },
+    "api/image/generate/route.ts": {
+      "maxDuration": 60
+    },
+    "api/content/generate/route.ts": {
+      "maxDuration": 60
+    }
+  }
 }
