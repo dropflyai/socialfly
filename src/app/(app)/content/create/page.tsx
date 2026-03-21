@@ -599,6 +599,29 @@ function CreateContentContent() {
                 <p className="text-xs text-muted-foreground">Generate a starting image first</p>
               )}
 
+              {/* Video Generation Progress */}
+              {generatingVideo && (
+                <div className="p-4 rounded-lg border bg-muted/50 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <div className="w-10 h-10 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+                      <Video className="h-4 w-4 absolute top-3 left-3 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Generating your video...</p>
+                      <p className="text-xs text-muted-foreground">
+                        {videoModel === 'quality'
+                          ? 'Quality mode takes 1-3 minutes. Please wait.'
+                          : 'Fast mode takes 10-30 seconds.'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full animate-pulse" style={{ width: '60%' }} />
+                  </div>
+                </div>
+              )}
+
               {/* Video Preview */}
               {generatedVideoUrl && (
                 <div className="space-y-2">
