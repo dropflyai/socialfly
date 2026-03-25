@@ -10,6 +10,9 @@ export const metadata: Metadata = {
   description: 'Your brand\'s content on autopilot. AI-powered social media management for creators and businesses.',
   keywords: ['social media', 'automation', 'AI', 'scheduling', 'content creation', 'socialfly'],
   metadataBase: new URL('https://socialfly.io'),
+  other: {
+    'tiktok-developers-site-verification': '86ydRRIW34KPd9wLqgR2TAYV80n5CMf7',
+  },
 }
 
 export default function RootLayout({

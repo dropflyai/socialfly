@@ -4,6 +4,9 @@ import Link from 'next/link'
 export const metadata: Metadata = {
   title: 'Terms of Service - SocialFly',
   description: 'SocialFly terms of service and conditions of use.',
+  other: {
+    'tiktok-developers-site-verification': '86ydRRIW34KPd9wLqgR2TAYV80n5CMf7',
+  },
 }
 
 export default function TermsPage() {
