@@ -29,7 +29,7 @@ export function getLinkedInAuthUrl(state: string): string {
     response_type: 'code',
     client_id: process.env.LINKEDIN_CLIENT_ID!,
     redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback/linkedin`,
-    scope: 'w_member_social w_organization_social r_organization_social rw_organization_admin r_basicprofile',
+    scope: 'openid profile w_member_social',
     state,
   })
 
