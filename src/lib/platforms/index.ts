@@ -9,8 +9,19 @@ import {
   postInstagramCarousel,
 } from './instagram'
 import { refreshTikTokToken, postTikTokVideo, postTikTokPhoto } from './tiktok'
+import {
+  refreshFacebookToken,
+  postFacebookText,
+  postFacebookImage,
+  postFacebookVideo,
+} from './facebook'
+import {
+  refreshLinkedInToken,
+  postLinkedInText,
+  postLinkedInImage,
+} from './linkedin'
 
-type Platform = 'twitter' | 'instagram' | 'tiktok'
+type Platform = 'twitter' | 'instagram' | 'tiktok' | 'facebook' | 'linkedin'
 
 interface PlatformConnection {
   id: string
@@ -22,6 +33,7 @@ interface PlatformConnection {
   profile_name: string
   profile_handle: string
   status: string
+  metadata?: Record<string, string>
 }
 
 interface PublishRequest {
@@ -64,12 +76,21 @@ export async function getValidToken(
     case 'twitter':
       newTokens = await refreshTwitterToken(connection.refresh_token)
       break
-    case 'instagram':
+    case 'instagram': {
       const igResult = await refreshInstagramToken(connection.access_token)
       newTokens = { ...igResult, refresh_token: undefined }
       break
+    }
     case 'tiktok':
       newTokens = await refreshTikTokToken(connection.refresh_token)
+      break
+    case 'facebook': {
+      const fbResult = await refreshFacebookToken(connection.access_token)
+      newTokens = { ...fbResult, refresh_token: undefined }
+      break
+    }
+    case 'linkedin':
+      newTokens = await refreshLinkedInToken(connection.refresh_token)
       break
     default:
       throw new Error(`Unsupported platform: ${connection.platform}`)
@@ -146,6 +167,39 @@ export async function publishToplatform(
         }
         break
       }
+
+      case 'facebook': {
+        const pageId = connection.profile_id
+        if (request.mediaType === 'video' && request.mediaUrls?.[0]) {
+          const result = await postFacebookVideo(token, pageId, request.mediaUrls[0], request.text)
+          platformPostId = result.id
+        } else if (request.mediaUrls?.[0]) {
+          const result = await postFacebookImage(token, pageId, request.mediaUrls[0], request.text)
+          platformPostId = result.id
+        } else {
+          // Facebook supports text-only posts
+          const result = await postFacebookText(token, pageId, request.text)
+          platformPostId = result.id
+        }
+        break
+      }
+
+      case 'linkedin': {
+        // LinkedIn author URN — can be person or organization
+        const authorUrn = connection.metadata?.organization_id
+          ? `urn:li:organization:${connection.metadata.organization_id}`
+          : `urn:li:person:${connection.profile_id}`
+
+        if (request.mediaUrls?.[0] && request.mediaType === 'image') {
+          const result = await postLinkedInImage(token, authorUrn, request.mediaUrls[0], request.text)
+          platformPostId = result.id
+        } else {
+          // LinkedIn supports text-only posts
+          const result = await postLinkedInText(token, authorUrn, request.text)
+          platformPostId = result.id
+        }
+        break
+      }
     }
 
     return { platform: request.platform, success: true, platformPostId }
@@ -173,13 +227,43 @@ function getEnvConnection(platform: Platform): PlatformConnection | null {
       platform: 'instagram',
       access_token: process.env.INSTAGRAM_PAGE_TOKEN,
       refresh_token: '',
-      token_expires_at: '2099-01-01T00:00:00Z', // Permanent token
+      token_expires_at: '2099-01-01T00:00:00Z',
       profile_id: process.env.INSTAGRAM_ACCOUNT_ID,
       profile_name: 'dropfly.ai',
       profile_handle: '@dropfly.ai',
       status: 'active',
     }
   }
+
+  if (platform === 'facebook' && process.env.FACEBOOK_PAGE_TOKEN && process.env.FACEBOOK_PAGE_ID) {
+    return {
+      id: 'env-facebook',
+      platform: 'facebook',
+      access_token: process.env.FACEBOOK_PAGE_TOKEN,
+      refresh_token: '',
+      token_expires_at: '2099-01-01T00:00:00Z',
+      profile_id: process.env.FACEBOOK_PAGE_ID,
+      profile_name: 'DropFly',
+      profile_handle: '@dropfly',
+      status: 'active',
+    }
+  }
+
+  if (platform === 'linkedin' && process.env.LINKEDIN_ACCESS_TOKEN && process.env.LINKEDIN_PERSON_ID) {
+    return {
+      id: 'env-linkedin',
+      platform: 'linkedin',
+      access_token: process.env.LINKEDIN_ACCESS_TOKEN,
+      refresh_token: '',
+      token_expires_at: '2099-01-01T00:00:00Z',
+      profile_id: process.env.LINKEDIN_PERSON_ID,
+      profile_name: 'DropFly',
+      profile_handle: 'dropfly',
+      status: 'active',
+      metadata: process.env.LINKEDIN_ORG_ID ? { organization_id: process.env.LINKEDIN_ORG_ID } : undefined,
+    }
+  }
+
   return null
 }
 

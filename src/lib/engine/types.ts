@@ -5,7 +5,7 @@
  * These types are independent of Next.js and can be used by the MCP server.
  */
 
-export type Platform = 'instagram' | 'twitter' | 'tiktok'
+export type Platform = 'instagram' | 'twitter' | 'tiktok' | 'facebook' | 'linkedin'
 export type MediaType = 'image' | 'video' | 'carousel'
 export type ContentType = 'text' | 'image_caption' | 'video_script' | 'thread'
 export type PostStatus = 'draft' | 'scheduled' | 'queued' | 'posting' | 'posted' | 'partial' | 'failed' | 'cancelled'
@@ -127,11 +127,80 @@ export interface ScheduledPostRecord extends PostRecord {
   retryCount: number
 }
 
+export interface CampaignRecord {
+  id: string
+  name: string
+  description?: string
+  status: 'active' | 'paused' | 'completed' | 'draft'
+  platforms: Platform[]
+  startDate?: string
+  endDate?: string
+  postIds: string[]
+  metrics?: CampaignMetrics
+  createdAt: string
+}
+
+export interface CampaignMetrics {
+  totalPosts: number
+  totalImpressions: number
+  totalEngagements: number
+  totalClicks: number
+  avgEngagementRate: number
+}
+
+export interface ContentCalendarEntry {
+  date: string
+  time: string
+  platform: Platform
+  topic: string
+  contentType: ContentType
+  tone?: string
+  campaignId?: string
+  status: 'planned' | 'scheduled' | 'posted' | 'skipped'
+}
+
+export interface ContentCalendar {
+  id?: string
+  entries: ContentCalendarEntry[]
+  startDate: string
+  endDate: string
+  platforms: Platform[]
+  postsPerDay: number
+  themes: string[]
+}
+
+export interface PlatformAnalytics {
+  platform: Platform
+  followers: number
+  impressions: number
+  engagements: number
+  clicks: number
+  engagementRate: number
+  topPosts: { postId: string; text: string; engagements: number }[]
+  postingFrequency: number
+  bestPostingTimes: string[]
+}
+
+export type ImageProvider = 'auto' | 'fal' | 'nanobanana'
+
+export interface ImageProviderScore {
+  provider: ImageProvider
+  score: number
+  reasons: string[]
+}
+
 export interface EngineConfig {
   supabaseUrl: string
   supabaseServiceKey: string
   anthropicApiKey: string
   falApiKey: string
+  geminiApiKey?: string           // For Nano Banana (Google Gemini)
+  defaultImageProvider?: ImageProvider
   instagramPageToken?: string
   instagramAccountId?: string
+  facebookPageToken?: string
+  facebookPageId?: string
+  linkedinAccessToken?: string
+  linkedinPersonId?: string
+  linkedinOrgId?: string
 }

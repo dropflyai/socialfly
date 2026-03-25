@@ -25,8 +25,8 @@ const PLATFORM_SPECS: Record<string, string> = {
   twitter: 'Twitter/X: Max 280 chars. Punchy, concise. Use 1-3 hashtags max. No markdown.',
   instagram: 'Instagram: Max 2200 chars. Storytelling, emoji-friendly. Use 5-15 relevant hashtags at the end. Line breaks for readability.',
   tiktok: 'TikTok: Max 150 chars for caption. Trendy, hook-focused, Gen-Z friendly. Use 3-5 hashtags.',
-  linkedin: 'LinkedIn: Max 3000 chars. Professional, thought leadership. Use 3-5 hashtags.',
-  facebook: 'Facebook: Max 500 chars. Community-focused, shareable. Use 2-3 hashtags.',
+  linkedin: 'LinkedIn: Max 3000 chars. Professional, thought leadership. Use 3-5 hashtags. Hook in the first line. Line breaks every 1-2 sentences.',
+  facebook: 'Facebook: Max 500 chars ideal (63,206 limit). Community-focused, shareable, question-driven. Use 2-3 hashtags. Encourage comments.',
 }
 
 const CONTENT_TYPE_INSTRUCTIONS: Record<string, string> = {

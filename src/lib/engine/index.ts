@@ -39,6 +39,54 @@ export { publish, schedule, listScheduled, cancelScheduled, getPostHistory } fro
 // Brand Voice
 export { loadBrandVoice, buildBrandContext } from './brand'
 
+// Analytics
+export { getAnalytics, getPerformanceSummary, storePostMetrics } from './analytics'
+
+// Content Calendar
+export { generateContentCalendar, getContentCalendars, executeCalendarEntry } from './calendar'
+
+// Campaigns
+export {
+  createCampaign,
+  listCampaigns,
+  getCampaign,
+  updateCampaign,
+  addPostToCampaign,
+  getCampaignMetrics,
+} from './campaigns'
+
+// Autopilot
+export {
+  runAutopilot,
+  generateWeeklyDigest,
+  getAutopilotConfig,
+  saveAutopilotConfig,
+} from './autopilot'
+
+// Brand Assets & Templates
+export {
+  addAsset,
+  listAssets,
+  getAsset,
+  deleteAsset,
+  pickBestAsset,
+  markAssetUsed,
+  createTemplate,
+  listTemplates,
+  applyTemplate,
+  saveBrandKit,
+  getBrandKit,
+} from './assets'
+
+// Smart Image Router
+export {
+  smartGenerateImage,
+  smartEditImage,
+  explainRouting,
+  scoreProviders,
+  pickProvider,
+} from './image-router'
+
 // Types
 export type {
   Platform,
@@ -58,6 +106,13 @@ export type {
   PostRecord,
   PostHistoryQuery,
   EngineConfig,
+  CampaignRecord,
+  CampaignMetrics,
+  ContentCalendar,
+  ContentCalendarEntry,
+  PlatformAnalytics,
+  ImageProvider,
+  ImageProviderScore,
 } from './types'
 
 export type { PipelineResult } from './pipeline'

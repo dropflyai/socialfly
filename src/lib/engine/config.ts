@@ -17,8 +17,15 @@ export function initEngine(config?: Partial<EngineConfig>): void {
     supabaseServiceKey: config?.supabaseServiceKey || process.env.SUPABASE_SERVICE_ROLE_KEY!,
     anthropicApiKey: config?.anthropicApiKey || process.env.ANTHROPIC_API_KEY!,
     falApiKey: config?.falApiKey || process.env.FAL_KEY!,
+    geminiApiKey: config?.geminiApiKey || process.env.GEMINI_API_KEY,
+    defaultImageProvider: (config?.defaultImageProvider || process.env.DEFAULT_IMAGE_PROVIDER || 'auto') as 'auto' | 'fal' | 'nanobanana',
     instagramPageToken: config?.instagramPageToken || process.env.INSTAGRAM_PAGE_TOKEN,
     instagramAccountId: config?.instagramAccountId || process.env.INSTAGRAM_ACCOUNT_ID,
+    facebookPageToken: config?.facebookPageToken || process.env.FACEBOOK_PAGE_TOKEN,
+    facebookPageId: config?.facebookPageId || process.env.FACEBOOK_PAGE_ID,
+    linkedinAccessToken: config?.linkedinAccessToken || process.env.LINKEDIN_ACCESS_TOKEN,
+    linkedinPersonId: config?.linkedinPersonId || process.env.LINKEDIN_PERSON_ID,
+    linkedinOrgId: config?.linkedinOrgId || process.env.LINKEDIN_ORG_ID,
   }
   _supabase = null // Reset client on re-init
 }
