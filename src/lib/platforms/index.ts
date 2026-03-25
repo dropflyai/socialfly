@@ -219,54 +219,6 @@ export async function publishToplatform(
   }
 }
 
-// Get a fallback connection from env vars (for owner's own accounts)
-function getEnvConnection(platform: Platform): PlatformConnection | null {
-  if (platform === 'instagram' && process.env.INSTAGRAM_PAGE_TOKEN && process.env.INSTAGRAM_ACCOUNT_ID) {
-    return {
-      id: 'env-instagram',
-      platform: 'instagram',
-      access_token: process.env.INSTAGRAM_PAGE_TOKEN,
-      refresh_token: '',
-      token_expires_at: '2099-01-01T00:00:00Z',
-      profile_id: process.env.INSTAGRAM_ACCOUNT_ID,
-      profile_name: 'dropfly.ai',
-      profile_handle: '@dropfly.ai',
-      status: 'active',
-    }
-  }
-
-  if (platform === 'facebook' && process.env.FACEBOOK_PAGE_TOKEN && process.env.FACEBOOK_PAGE_ID) {
-    return {
-      id: 'env-facebook',
-      platform: 'facebook',
-      access_token: process.env.FACEBOOK_PAGE_TOKEN,
-      refresh_token: '',
-      token_expires_at: '2099-01-01T00:00:00Z',
-      profile_id: process.env.FACEBOOK_PAGE_ID,
-      profile_name: 'DropFly',
-      profile_handle: '@dropfly',
-      status: 'active',
-    }
-  }
-
-  if (platform === 'linkedin' && process.env.LINKEDIN_ACCESS_TOKEN && process.env.LINKEDIN_PERSON_ID) {
-    return {
-      id: 'env-linkedin',
-      platform: 'linkedin',
-      access_token: process.env.LINKEDIN_ACCESS_TOKEN,
-      refresh_token: '',
-      token_expires_at: '2099-01-01T00:00:00Z',
-      profile_id: process.env.LINKEDIN_PERSON_ID,
-      profile_name: 'DropFly',
-      profile_handle: 'dropfly',
-      status: 'active',
-      metadata: process.env.LINKEDIN_ORG_ID ? { organization_id: process.env.LINKEDIN_ORG_ID } : undefined,
-    }
-  }
-
-  return null
-}
-
 // Publish to multiple platforms at once
 export async function publishToMultiplePlatforms(
   userId: string,
@@ -277,7 +229,7 @@ export async function publishToMultiplePlatforms(
 ): Promise<PublishResult[]> {
   const supabase = getServiceClient()
 
-  // Get all connected platforms for user
+  // Get all connected platforms for this user (DB only — no env fallbacks)
   const { data: connections, error } = await supabase
     .from('platform_connections')
     .select('*')
@@ -287,23 +239,15 @@ export async function publishToMultiplePlatforms(
 
   if (error) throw new Error(`Failed to get platform connections: ${error.message}`)
 
-  // Build final connection list, using env fallbacks for missing platforms
-  const connMap = new Map<Platform, PlatformConnection>()
-  for (const conn of (connections || []) as PlatformConnection[]) {
-    connMap.set(conn.platform, conn)
-  }
-  for (const p of platforms) {
-    if (!connMap.has(p)) {
-      const envConn = getEnvConnection(p)
-      if (envConn) connMap.set(p, envConn)
-    }
-  }
+  const activeConnections = (connections || []) as PlatformConnection[]
 
-  if (connMap.size === 0) throw new Error('No active platform connections found')
+  if (activeConnections.length === 0) {
+    throw new Error('No active platform connections found. Please connect your accounts in Settings > Platforms.')
+  }
 
   // Publish to each platform in parallel
   const results = await Promise.all(
-    Array.from(connMap.values()).map((conn) =>
+    activeConnections.map((conn) =>
       publishToplatform(conn, {
         platform: conn.platform,
         text,

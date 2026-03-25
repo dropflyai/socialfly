@@ -3,7 +3,7 @@
 import { useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import {
-  Sparkles, Video, FileText, ImageIcon, ArrowLeft, Loader2, Send, Clock, Check,
+  Sparkles, Video, FileText, ImageIcon, ArrowLeft, Loader2, Send, Clock, Check, Camera, Upload,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -55,6 +55,92 @@ function CreateContentContent() {
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState(defaultTab)
+
+  // Caption My Media state
+  const [captionMediaUrl, setCaptionMediaUrl] = useState('')
+  const [captionContext, setCaptionContext] = useState('')
+  const [captionTone, setCaptionTone] = useState('')
+  const [generatedCaptions, setGeneratedCaptions] = useState<Record<string, { text: string; hashtags: string[]; engagement_hook: string }> | null>(null)
+  const [generatingCaptions, setGeneratingCaptions] = useState(false)
+  const [captionFileInput, setCaptionFileInput] = useState<HTMLInputElement | null>(null)
+
+  const handleCaptionUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    const file = files[0]
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('name', file.name.replace(/\.[^.]+$/, ''))
+    formData.append('category', 'general')
+
+    try {
+      const res = await fetch('/api/media', { method: 'POST', body: formData })
+      const data = await res.json()
+      if (res.ok && data.asset?.url) {
+        setCaptionMediaUrl(data.asset.url)
+      }
+    } catch (err) {
+      setError('Failed to upload file')
+    }
+  }
+
+  const handleGenerateCaptions = async () => {
+    if (!captionContext || !selectedPlatforms.length) return
+    setGeneratingCaptions(true)
+    setError(null)
+    setGeneratedCaptions(null)
+
+    try {
+      const res = await fetch('/api/caption', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          context: captionContext,
+          platforms: selectedPlatforms,
+          tone: captionTone || undefined,
+          includeCta: true,
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Caption generation failed')
+
+      setGeneratedCaptions(data.captions)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Caption generation failed')
+    } finally {
+      setGeneratingCaptions(false)
+    }
+  }
+
+  const handlePublishCaptioned = async () => {
+    if (!generatedCaptions || !captionMediaUrl) return
+    setPublishing(true)
+    setError(null)
+
+    try {
+      const firstCaption = Object.values(generatedCaptions)[0]
+      const res = await fetch('/api/posts/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: firstCaption.text,
+          platforms: selectedPlatforms,
+          mediaUrls: [captionMediaUrl],
+          mediaType: 'image',
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Publish failed')
+
+      setSuccessMessage('Published successfully!')
+      setTimeout(() => router.push('/content'), 2000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Publish failed')
+    } finally {
+      setPublishing(false)
+    }
+  }
 
   // Video state
   const [videoPrompt, setVideoPrompt] = useState('')
@@ -314,6 +400,10 @@ function CreateContentContent() {
           <TabsTrigger value="video" className="gap-2">
             <Video className="h-4 w-4" />
             Video Post
+          </TabsTrigger>
+          <TabsTrigger value="caption" className="gap-2">
+            <Camera className="h-4 w-4" />
+            Caption My Media
           </TabsTrigger>
         </TabsList>
 
@@ -670,6 +760,186 @@ function CreateContentContent() {
                       </>
                     )}
                   </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Caption My Media Tab */}
+        <TabsContent value="caption" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Caption Your Own Media</CardTitle>
+              <CardDescription>
+                Upload your photo or video and AI will write platform-specific captions with hashtags
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Media Upload */}
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Your Image or Video</Label>
+                  {captionMediaUrl ? (
+                    <div className="space-y-3">
+                      <div className="relative rounded-lg overflow-hidden border bg-muted max-w-md">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={captionMediaUrl} alt="Your media" className="w-full h-auto" />
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCaptionMediaUrl('')}
+                      >
+                        Change Image
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div
+                        className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                        onClick={() => captionFileInput?.click()}
+                      >
+                        <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+                        <p className="text-sm text-muted-foreground mb-1">
+                          Click to upload or drag and drop
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          JPG, PNG, GIF, MP4 up to 20MB
+                        </p>
+                      </div>
+                      <input
+                        ref={(el) => setCaptionFileInput(el)}
+                        type="file"
+                        accept="image/*,video/*"
+                        className="hidden"
+                        onChange={(e) => handleCaptionUpload(e.target.files)}
+                      />
+                      <div className="relative flex items-center">
+                        <div className="flex-grow border-t border-border" />
+                        <span className="mx-4 text-sm text-muted-foreground">or</span>
+                        <div className="flex-grow border-t border-border" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Paste an image URL</Label>
+                        <Input
+                          placeholder="https://example.com/your-photo.jpg"
+                          value={captionMediaUrl}
+                          onChange={(e) => setCaptionMediaUrl(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Context */}
+              <div className="space-y-2">
+                <Label htmlFor="caption-context">Describe what this shows</Label>
+                <textarea
+                  id="caption-context"
+                  placeholder="e.g., Team photo at our product launch event, new office space reveal, product packaging flat lay..."
+                  className="w-full min-h-24 p-3 rounded-lg border bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                  value={captionContext}
+                  onChange={(e) => setCaptionContext(e.target.value)}
+                />
+              </div>
+
+              {/* Tone */}
+              <div className="space-y-2">
+                <Label>Tone (optional)</Label>
+                <div className="flex flex-wrap gap-2">
+                  {['professional', 'casual', 'playful', 'inspirational', 'educational'].map((t) => (
+                    <Button
+                      key={t}
+                      variant={captionTone === t ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setCaptionTone(captionTone === t ? '' : t)}
+                      className="capitalize"
+                    >
+                      {t}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <Button
+                onClick={handleGenerateCaptions}
+                disabled={!captionContext || !selectedPlatforms.length || generatingCaptions || !captionMediaUrl}
+                className="gap-2"
+              >
+                {generatingCaptions ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Generating Captions...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4" />
+                    Generate Captions
+                  </>
+                )}
+              </Button>
+
+              {/* Generated Captions */}
+              {generatedCaptions && (
+                <div className="space-y-4 pt-4 border-t">
+                  <h3 className="font-semibold">Generated Captions</h3>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {Object.entries(generatedCaptions).map(([platform, caption]) => (
+                      <Card key={platform}>
+                        <CardHeader className="pb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">{platformIcons[platform]}</span>
+                            <CardTitle className="text-base capitalize">
+                              {platform === 'twitter' ? 'X (Twitter)' : platform}
+                            </CardTitle>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          {captionMediaUrl && (
+                            <div className="rounded overflow-hidden border bg-muted">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={captionMediaUrl} alt="" className="w-full h-32 object-cover" />
+                            </div>
+                          )}
+                          <p className="text-sm whitespace-pre-wrap">{caption.text}</p>
+                          {caption.hashtags?.length > 0 && (
+                            <div className="flex gap-1 flex-wrap">
+                              {caption.hashtags.map((tag, i) => (
+                                <Badge key={i} variant="outline" className="text-xs">{tag}</Badge>
+                              ))}
+                            </div>
+                          )}
+                          {caption.engagement_hook && (
+                            <p className="text-xs text-muted-foreground italic">
+                              Tip: {caption.engagement_hook}
+                            </p>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+
+                  {/* Publish */}
+                  <Card>
+                    <CardContent className="pt-6">
+                      <div className="flex flex-col sm:flex-row gap-4">
+                        <Button
+                          onClick={handlePublishCaptioned}
+                          disabled={publishing}
+                          className="gap-2"
+                        >
+                          {publishing ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Send className="h-4 w-4" />
+                          )}
+                          Publish Now
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
                 </div>
               )}
             </CardContent>

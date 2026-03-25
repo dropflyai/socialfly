@@ -14,6 +14,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Palette,
+  FolderOpen,
+  Megaphone,
+  LayoutTemplate,
 } from 'lucide-react'
 import { useUIStore } from '@/stores/ui-store'
 import { Button } from '@/components/ui/button'
@@ -35,9 +38,24 @@ const mainNavItems = [
     icon: Sparkles,
   },
   {
+    title: 'Media',
+    href: '/media',
+    icon: FolderOpen,
+  },
+  {
     title: 'Schedule',
     href: '/schedule',
     icon: Calendar,
+  },
+  {
+    title: 'Campaigns',
+    href: '/campaigns',
+    icon: Megaphone,
+  },
+  {
+    title: 'Templates',
+    href: '/templates',
+    icon: LayoutTemplate,
   },
   {
     title: 'Automations',

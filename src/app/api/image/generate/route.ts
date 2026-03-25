@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { fal } from '@fal-ai/client'
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 
 fal.config({ credentials: process.env.FAL_KEY })
 
@@ -10,6 +11,14 @@ export async function POST(request: NextRequest) {
 
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const rateCheck = checkRateLimit(`${user.id}:image-generate`, RATE_LIMITS.imageGenerate)
+  if (!rateCheck.allowed) {
+    return NextResponse.json(
+      { error: 'Rate limit exceeded. Please wait before generating more images.' },
+      { status: 429, headers: { 'Retry-After': String(Math.ceil((rateCheck.resetAt - Date.now()) / 1000)) } }
+    )
   }
 
   const { prompt, aspectRatio = '1:1' } = await request.json()

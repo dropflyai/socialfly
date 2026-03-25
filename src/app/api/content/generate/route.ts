@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient, createServiceClient } from '@/lib/supabase-server'
 import Anthropic from '@anthropic-ai/sdk'
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -20,6 +21,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const rateCheck = checkRateLimit(`${user.id}:content-generate`, RATE_LIMITS.aiGenerate)
+  if (!rateCheck.allowed) {
+    return NextResponse.json(
+      { error: 'Rate limit exceeded. Please wait before generating more content.' },
+      { status: 429, headers: { 'Retry-After': String(Math.ceil((rateCheck.resetAt - Date.now()) / 1000)) } }
+    )
+  }
+
   const body: GenerateRequest = await request.json()
   const { prompt, platforms, contentType, brandId, tone } = body
 
@@ -35,6 +44,7 @@ export async function POST(request: NextRequest) {
       .from('brand_profiles')
       .select('*')
       .eq('id', brandId)
+      .eq('user_id', user.id)
       .single()
 
     if (brand) {

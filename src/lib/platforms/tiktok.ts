@@ -4,6 +4,11 @@
 const TIKTOK_API_BASE = 'https://open.tiktokapis.com/v2'
 const TIKTOK_AUTH_BASE = 'https://www.tiktok.com/v2/auth/authorize'
 
+// In sandbox mode, TikTok only allows SELF_ONLY privacy
+const TIKTOK_PRIVACY_LEVEL = process.env.TIKTOK_SANDBOX === 'true'
+  ? 'SELF_ONLY'
+  : 'PUBLIC_TO_EVERYONE'
+
 export interface TikTokTokens {
   access_token: string
   refresh_token: string
@@ -115,7 +120,7 @@ export async function postTikTokVideo(
     body: JSON.stringify({
       post_info: {
         title: title.slice(0, 150), // TikTok title limit
-        privacy_level: 'PUBLIC_TO_EVERYONE',
+        privacy_level: TIKTOK_PRIVACY_LEVEL,
         disable_duet: false,
         disable_comment: false,
         disable_stitch: false,
@@ -156,7 +161,7 @@ export async function postTikTokPhoto(
     body: JSON.stringify({
       post_info: {
         title: title.slice(0, 150),
-        privacy_level: 'PUBLIC_TO_EVERYONE',
+        privacy_level: TIKTOK_PRIVACY_LEVEL,
       },
       source_info: {
         source: 'PULL_FROM_URL',

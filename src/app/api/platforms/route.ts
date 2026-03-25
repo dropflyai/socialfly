@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient, createServiceClient } from '@/lib/supabase-server'
 
-// GET /api/platforms — get user's connected platforms
+// GET /api/platforms — get user's connected platforms (DB only, no env fallbacks)
 export async function GET() {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
