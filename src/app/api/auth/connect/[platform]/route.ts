@@ -4,6 +4,7 @@ import crypto from 'crypto'
 import { getTwitterAuthUrl } from '@/lib/platforms/twitter'
 import { getInstagramAuthUrl } from '@/lib/platforms/instagram'
 import { getTikTokAuthUrl } from '@/lib/platforms/tiktok'
+import { getLinkedInAuthUrl } from '@/lib/platforms/linkedin'
 
 // GET /api/auth/connect/[platform] — initiates OAuth flow
 export async function GET(
@@ -55,6 +56,10 @@ export async function GET(
 
     case 'tiktok':
       authUrl = getTikTokAuthUrl(state)
+      break
+
+    case 'linkedin':
+      authUrl = getLinkedInAuthUrl(state)
       break
 
     default:

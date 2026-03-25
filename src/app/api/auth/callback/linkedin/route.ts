@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { exchangeLinkedInCode, getLinkedInProfile } from '@/lib/platforms/linkedin'
 
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
+
+// GET /api/auth/callback/linkedin — handle LinkedIn OAuth callback
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
@@ -8,100 +15,74 @@ export async function GET(request: NextRequest) {
   const error = searchParams.get('error')
 
   if (error) {
-    return NextResponse.redirect(
-      new URL(`/platforms?error=${encodeURIComponent(error)}`, request.url)
-    )
+    console.error('LinkedIn OAuth error:', error)
+    return NextResponse.redirect(new URL('/platforms?error=linkedin_denied', request.url))
   }
 
   if (!code || !state) {
     return NextResponse.redirect(new URL('/platforms?error=missing_params', request.url))
   }
 
+  // Verify state
   const storedState = request.cookies.get('oauth_state')?.value
-  if (state !== storedState) {
-    return NextResponse.redirect(new URL('/platforms?error=invalid_state', request.url))
-  }
-
-  let userId: string
-  try {
-    const parsed = JSON.parse(Buffer.from(state, 'base64url').toString())
-    userId = parsed.userId
-  } catch {
+  if (!storedState || storedState !== state) {
     return NextResponse.redirect(new URL('/platforms?error=invalid_state', request.url))
   }
 
   try {
-    // Exchange code for access token
-    const tokenRes = await fetch('https://www.linkedin.com/oauth/v2/accessToken', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        code,
-        client_id: process.env.LINKEDIN_CLIENT_ID!,
-        client_secret: process.env.LINKEDIN_CLIENT_SECRET!,
-        redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback/linkedin`,
-      }),
-    })
+    // Decode state to get user ID
+    const stateData = JSON.parse(Buffer.from(state, 'base64url').toString())
+    const userId = stateData.userId
 
-    if (!tokenRes.ok) {
-      const errText = await tokenRes.text()
-      throw new Error(`Token exchange failed: ${errText}`)
+    if (!userId) {
+      return NextResponse.redirect(new URL('/platforms?error=no_user', request.url))
     }
 
-    const tokens = await tokenRes.json()
-    const accessToken = tokens.access_token
-    const expiresIn = tokens.expires_in || 5184000 // 60 days default
+    // Exchange code for tokens
+    const tokens = await exchangeLinkedInCode(code)
 
-    // Get user profile using OpenID userinfo
-    const profileRes = await fetch('https://api.linkedin.com/v2/userinfo', {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    })
-
+    // Get profile info
     let profileName = 'LinkedIn User'
-    let profileId = ''
     let profileHandle = ''
-
-    if (profileRes.ok) {
-      const profile = await profileRes.json()
-      profileId = profile.sub || ''
-      profileName = profile.name || `${profile.given_name || ''} ${profile.family_name || ''}`.trim()
-      profileHandle = profile.email || profileName
+    let profileId = ''
+    try {
+      const profile = await getLinkedInProfile(tokens.access_token)
+      profileName = `${profile.localizedFirstName} ${profile.localizedLastName}`
+      profileId = profile.id
+      profileHandle = profile.id
+    } catch (e) {
+      console.error('Failed to get LinkedIn profile:', e)
     }
 
-    // Store connection
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
-
+    // Store connection in database
     const { error: dbError } = await supabase
       .from('platform_connections')
       .upsert({
         user_id: userId,
         platform: 'linkedin',
-        access_token: accessToken,
-        refresh_token: tokens.refresh_token || '',
-        token_expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        token_expires_at: new Date(tokens.expires_at).toISOString(),
         profile_id: profileId,
         profile_name: profileName,
         profile_handle: profileHandle,
         status: 'active',
-        connected_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'user_id,platform' })
+      }, {
+        onConflict: 'user_id,platform',
+      })
 
-    if (dbError) throw dbError
+    if (dbError) {
+      console.error('Failed to store LinkedIn connection:', dbError)
+      return NextResponse.redirect(new URL('/platforms?error=db_error', request.url))
+    }
 
-    const response = NextResponse.redirect(
-      new URL(`/platforms?connected=linkedin&name=${encodeURIComponent(profileName)}`, request.url)
-    )
+    // Clear the state cookie
+    const response = NextResponse.redirect(new URL('/platforms?connected=linkedin', request.url))
     response.cookies.delete('oauth_state')
     return response
-  } catch (err) {
-    console.error('LinkedIn OAuth error:', err)
-    return NextResponse.redirect(
-      new URL(`/platforms?error=${encodeURIComponent('LinkedIn connection failed: ' + (err instanceof Error ? err.message : 'unknown'))}`, request.url)
-    )
+  } catch (e) {
+    console.error('LinkedIn callback error:', e)
+    return NextResponse.redirect(new URL('/platforms?error=exchange_failed', request.url))
   }
 }
