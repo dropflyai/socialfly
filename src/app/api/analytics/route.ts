@@ -83,7 +83,8 @@ export async function GET(request: NextRequest) {
 
   // Top performing posts
   const topPosts = postedPosts
-    .map(post => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .map((post: any) => {
       const metrics = post.metrics as Record<string, { likes?: number; comments?: number }> | null
       let engagement = 0
       if (metrics) {
@@ -100,7 +101,7 @@ export async function GET(request: NextRequest) {
         metrics: post.metrics,
       }
     })
-    .sort((a, b) => b.engagement - a.engagement)
+    .sort((a: { engagement: number }, b: { engagement: number }) => b.engagement - a.engagement)
     .slice(0, 10)
 
   const engagementRate = totalImpressions > 0
