@@ -87,6 +87,10 @@ import {
   smartGenerateImage,
   smartEditImage,
   explainRouting,
+  // Newsletter Transformer
+  transformNewsToContent,
+  generateDailyNewsContent,
+  transformNewsletterText,
   type Platform,
   type ImageProvider,
 } from '../src/lib/engine/index.js'
@@ -756,6 +760,80 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           needs_consistency: { type: 'boolean' },
         },
         required: ['prompt'],
+      },
+    },
+
+    // ── Newsletter-to-Content Transformer ─────────────────────────────
+    {
+      name: 'transform_news_to_content',
+      description:
+        'Transform AI news items into platform-specific social media posts. Feed it headlines and summaries, get back ready-to-post content tied to DropFly\'s angle. Every post connects the news to what DropFly delivers for businesses.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          news_items: {
+            type: 'array',
+            description: 'Array of news items to transform',
+            items: {
+              type: 'object',
+              properties: {
+                headline: { type: 'string', description: 'News headline' },
+                summary: { type: 'string', description: 'Brief summary' },
+                source: { type: 'string', description: 'Publication name' },
+                url: { type: 'string', description: 'Article URL' },
+              },
+              required: ['headline'],
+            },
+          },
+          platforms: {
+            type: 'array',
+            items: { type: 'string', enum: ALL_PLATFORMS },
+            description: 'Target platforms. Default: ["instagram", "facebook"]',
+          },
+          max_posts_per_item: { type: 'number', description: 'Posts per news item. Default: 2' },
+          tone: { type: 'string', description: 'Content tone override' },
+          brand_id: { type: 'string', description: 'Brand profile ID' },
+        },
+        required: ['news_items'],
+      },
+    },
+    {
+      name: 'generate_daily_news_content',
+      description:
+        'Full auto pipeline: fetches today\'s top AI news, transforms into social media posts, optionally injects into the content calendar. This is the "AI news → social content" autopilot.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          platforms: {
+            type: 'array',
+            items: { type: 'string', enum: ALL_PLATFORMS },
+            description: 'Target platforms. Default: ["instagram", "facebook"]',
+          },
+          max_news_items: { type: 'number', description: 'How many news stories to cover. Default: 3' },
+          max_posts_per_item: { type: 'number', description: 'Posts per story. Default: 2' },
+          inject_into_calendar: { type: 'boolean', description: 'Auto-add to active content calendar. Default: false' },
+          target_date: { type: 'string', description: 'Date to inject for (YYYY-MM-DD). Default: today' },
+          brand_id: { type: 'string', description: 'Brand profile ID' },
+        },
+      },
+    },
+    {
+      name: 'transform_newsletter_text',
+      description:
+        'Feed in the raw text of a newsletter (like the daily AI briefing) and get back social media posts. Extracts the top stories and transforms them into platform-specific content.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          newsletter_text: { type: 'string', description: 'The full newsletter text to transform' },
+          platforms: {
+            type: 'array',
+            items: { type: 'string', enum: ALL_PLATFORMS },
+            description: 'Target platforms. Default: ["instagram", "facebook"]',
+          },
+          max_posts: { type: 'number', description: 'Max posts to generate. Default: 4' },
+          brand_id: { type: 'string', description: 'Brand profile ID' },
+        },
+        required: ['newsletter_text'],
       },
     },
   ],
@@ -1460,6 +1538,111 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
       }
 
+      // ── Newsletter Transformer ──────────────────────────────────────
+
+      case 'transform_news_to_content': {
+        const userId = await getUserId()
+
+        const result = await transformNewsToContent(
+          args.news_items as { headline: string; summary?: string; source?: string; url?: string }[],
+          {
+            platforms: (args.platforms as Platform[]) || ['instagram', 'facebook'],
+            userId: userId || undefined,
+            brandId: args.brand_id as string | undefined,
+            maxPostsPerItem: (args.max_posts_per_item as number) || 2,
+            tone: args.tone as string | undefined,
+          }
+        )
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              newsItems: result.newsItems.length,
+              postsGenerated: result.posts.length,
+              posts: result.posts.map(p => ({
+                platform: p.platform,
+                newsHeadline: p.newsItem.headline,
+                hotTakeAngle: p.hotTakeAngle,
+                text: p.text,
+                hashtags: p.hashtags,
+                imagePrompt: p.imagePrompt,
+                tone: p.tone,
+              })),
+            }, null, 2),
+          }],
+        }
+      }
+
+      case 'generate_daily_news_content': {
+        const userId = await getUserId()
+        if (!userId) {
+          return { content: [{ type: 'text', text: 'Error: No user ID configured.' }] }
+        }
+
+        const result = await generateDailyNewsContent(userId, {
+          platforms: (args.platforms as Platform[]) || ['instagram', 'facebook'],
+          maxNewsItems: (args.max_news_items as number) || 3,
+          maxPostsPerItem: (args.max_posts_per_item as number) || 2,
+          brandId: args.brand_id as string | undefined,
+          injectIntoCalendar: (args.inject_into_calendar as boolean) || false,
+          targetDate: args.target_date as string | undefined,
+        })
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              newsItemsFound: result.newsItems.length,
+              postsGenerated: result.posts.length,
+              injectedIntoCalendar: !!result.calendarEntries?.length,
+              news: result.newsItems.map(n => n.headline),
+              posts: result.posts.map(p => ({
+                platform: p.platform,
+                newsHeadline: p.newsItem.headline,
+                hotTakeAngle: p.hotTakeAngle,
+                text: p.text,
+                hashtags: p.hashtags,
+                imagePrompt: p.imagePrompt,
+              })),
+              calendarEntries: result.calendarEntries,
+            }, null, 2),
+          }],
+        }
+      }
+
+      case 'transform_newsletter_text': {
+        const userId = await getUserId()
+
+        const result = await transformNewsletterText(
+          args.newsletter_text as string,
+          {
+            platforms: (args.platforms as Platform[]) || ['instagram', 'facebook'],
+            userId: userId || undefined,
+            brandId: args.brand_id as string | undefined,
+            maxPosts: (args.max_posts as number) || 4,
+          }
+        )
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              newsExtracted: result.newsItems.length,
+              postsGenerated: result.posts.length,
+              posts: result.posts.map(p => ({
+                platform: p.platform,
+                newsHeadline: p.newsItem.headline,
+                hotTakeAngle: p.hotTakeAngle,
+                text: p.text,
+                hashtags: p.hashtags,
+                imagePrompt: p.imagePrompt,
+              })),
+            }, null, 2),
+          }],
+        }
+      }
+
       default:
         return {
           content: [{ type: 'text', text: `Unknown tool: ${name}` }],
@@ -1480,7 +1663,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
   const transport = new StdioServerTransport()
   await server.connect(transport)
-  console.error('[socialfly-mcp] Server v3.1.0 running — 38 tools across 9 categories')
+  console.error('[socialfly-mcp] Server v3.2.0 running — 41 tools across 10 categories')
 }
 
 main().catch((error) => {

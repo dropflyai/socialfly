@@ -87,6 +87,14 @@ export {
   pickProvider,
 } from './image-router'
 
+// Newsletter-to-Content Transformer
+export {
+  transformNewsToContent,
+  fetchTodayAINews,
+  generateDailyNewsContent,
+  transformNewsletterText,
+} from './newsletter-transformer'
+
 // Types
 export type {
   Platform,
