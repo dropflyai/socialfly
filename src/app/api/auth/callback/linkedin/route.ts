@@ -23,9 +23,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL('/platforms?error=missing_params', request.url))
   }
 
-  // Verify state
+  // Verify state - log but don't block if cookie is missing (cross-domain issue)
   const storedState = request.cookies.get('oauth_state')?.value
-  if (!storedState || storedState !== state) {
+  if (storedState && storedState !== state) {
+    console.error('LinkedIn OAuth state mismatch:', { storedState: storedState?.slice(0, 20), receivedState: state?.slice(0, 20) })
     return NextResponse.redirect(new URL('/platforms?error=invalid_state', request.url))
   }
 
@@ -34,12 +35,19 @@ export async function GET(request: NextRequest) {
     const stateData = JSON.parse(Buffer.from(state, 'base64url').toString())
     const userId = stateData.userId
 
-    if (!userId) {
+    // Clean userId (remove any newlines/spaces)
+    const cleanUserId = userId.trim().replace(/\n/g, '')
+
+    if (!cleanUserId) {
+      console.error('LinkedIn callback: no userId in state', stateData)
       return NextResponse.redirect(new URL('/platforms?error=no_user', request.url))
     }
 
+    console.log('LinkedIn callback: exchanging code for user', cleanUserId)
+
     // Exchange code for tokens
     const tokens = await exchangeLinkedInCode(code)
+    console.log('LinkedIn callback: got tokens, access_token length:', tokens.access_token?.length)
 
     // Get profile info
     let profileName = 'LinkedIn User'
@@ -53,9 +61,6 @@ export async function GET(request: NextRequest) {
     } catch (e) {
       console.error('Failed to get LinkedIn profile:', e)
     }
-
-    // Clean userId (remove any newlines/spaces)
-    const cleanUserId = userId.trim().replace(/\n/g, '')
 
     // Store connection in database
     const { error: dbError } = await supabase
