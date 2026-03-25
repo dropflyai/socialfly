@@ -1,0 +1,134 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createServerSupabaseClient, createServiceClient } from '@/lib/supabase-server'
+
+// GET /api/automations — list automation rules
+export async function GET(request: NextRequest) {
+  const supabase = await createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { searchParams } = new URL(request.url)
+  const status = searchParams.get('status') // active, paused, or null for all
+
+  const serviceClient = createServiceClient()
+  let query = serviceClient
+    .from('automation_rules')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+
+  if (status) {
+    query = query.eq('status', status)
+  }
+
+  const { data: rules, error } = await query
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ rules: rules || [] })
+}
+
+// POST /api/automations — create a new automation rule
+export async function POST(request: NextRequest) {
+  const supabase = await createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const body = await request.json()
+  const { name, type, config, platforms, schedule } = body
+
+  if (!name || !type) {
+    return NextResponse.json({ error: 'Missing name or type' }, { status: 400 })
+  }
+
+  const serviceClient = createServiceClient()
+  const { data: rule, error } = await serviceClient
+    .from('automation_rules')
+    .insert({
+      user_id: user.id,
+      name,
+      type,
+      config: config || {},
+      platforms: platforms || ['instagram'],
+      schedule: schedule || 'daily',
+      status: 'active',
+      last_run: null,
+      run_count: 0,
+    })
+    .select()
+    .single()
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ rule })
+}
+
+// PATCH /api/automations?id=xxx — update rule status
+export async function PATCH(request: NextRequest) {
+  const supabase = await createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { searchParams } = new URL(request.url)
+  const ruleId = searchParams.get('id')
+  if (!ruleId) {
+    return NextResponse.json({ error: 'Missing rule ID' }, { status: 400 })
+  }
+
+  const body = await request.json()
+  const serviceClient = createServiceClient()
+
+  const { error } = await serviceClient
+    .from('automation_rules')
+    .update({ ...body, updated_at: new Date().toISOString() })
+    .eq('id', ruleId)
+    .eq('user_id', user.id)
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ success: true })
+}
+
+// DELETE /api/automations?id=xxx — delete a rule
+export async function DELETE(request: NextRequest) {
+  const supabase = await createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { searchParams } = new URL(request.url)
+  const ruleId = searchParams.get('id')
+  if (!ruleId) {
+    return NextResponse.json({ error: 'Missing rule ID' }, { status: 400 })
+  }
+
+  const serviceClient = createServiceClient()
+  const { error } = await serviceClient
+    .from('automation_rules')
+    .delete()
+    .eq('id', ruleId)
+    .eq('user_id', user.id)
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ success: true })
+}

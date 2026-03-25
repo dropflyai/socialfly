@@ -46,3 +46,5 @@ credentials/
 # Misc
 *.log
 .env*.local
+deliverables/
+supabase/.temp/
