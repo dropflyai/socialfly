@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   keywords: ['social media', 'automation', 'AI', 'scheduling', 'content creation', 'socialfly'],
   metadataBase: new URL('https://socialfly.io'),
   other: {
-    'tiktok-developers-site-verification': 'TbSHvx419Jtlaxnx4aUfplm3J14cBze1',
+    'tiktok-developers-site-verification': 'NIZWHuxjrCVDOcmKR4M4FD0eKsI5pBXc',
   },
 }
 
