@@ -92,12 +92,16 @@ export async function GET(request: NextRequest) {
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : 'Unknown error'
     console.error('LinkedIn callback error:', errMsg)
-    // Return JSON error instead of redirect so we can see what failed
     return NextResponse.json({
       error: 'exchange_failed',
       message: errMsg,
-      code: code?.slice(0, 10) + '...',
-      state: state?.slice(0, 20) + '...',
+      debug: {
+        client_id: process.env.LINKEDIN_CLIENT_ID?.slice(0, 5) + '...',
+        client_secret_length: process.env.LINKEDIN_CLIENT_SECRET?.length,
+        redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback/linkedin`,
+        app_url: process.env.NEXT_PUBLIC_APP_URL,
+        code_length: code?.length,
+      },
     }, { status: 500 })
   }
 }
