@@ -836,6 +836,53 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['newsletter_text'],
       },
     },
+
+    // ── User-Provided Content ─────────────────────────────────────────
+    {
+      name: 'caption_and_post',
+      description:
+        'You provide the image/video URL, I write the caption and post it. No AI image generation — uses YOUR content. Perfect for real photos, screenshots, team pics, event shots, or any content you create yourself.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          media_url: { type: 'string', description: 'URL of your image or video to post' },
+          media_type: { type: 'string', enum: ['image', 'video', 'carousel'], description: 'Type of media. Default: image' },
+          context: { type: 'string', description: 'What is this image/video about? Give me context so I can write a great caption. E.g., "team photo at our LA office", "screenshot of new VoiceFly dashboard", "video of our AI answering a call"' },
+          platforms: {
+            type: 'array',
+            items: { type: 'string', enum: ALL_PLATFORMS },
+            description: 'Where to post. Default: ["instagram"]',
+          },
+          tone: { type: 'string', description: 'Caption tone. Default: "professional but approachable"' },
+          include_cta: { type: 'boolean', description: 'Include a call-to-action? Default: true' },
+          cta_text: { type: 'string', description: 'Custom CTA text. Default: auto-generated based on content' },
+          brand_id: { type: 'string', description: 'Brand profile ID for voice matching' },
+          draft_only: { type: 'boolean', description: 'Just generate the caption without posting. Default: false' },
+        },
+        required: ['media_url', 'context'],
+      },
+    },
+    {
+      name: 'write_caption',
+      description:
+        'Just write a caption for content you already have — no posting. Returns platform-specific captions with hashtags. You decide when and where to post.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          context: { type: 'string', description: 'Describe what the image/video shows and what message you want to convey' },
+          platforms: {
+            type: 'array',
+            items: { type: 'string', enum: ALL_PLATFORMS },
+            description: 'Which platforms to write captions for. Default: ["instagram", "facebook"]',
+          },
+          tone: { type: 'string', description: 'Caption tone' },
+          include_hashtags: { type: 'boolean', description: 'Include hashtags? Default: true' },
+          include_cta: { type: 'boolean', description: 'Include call-to-action? Default: true' },
+          brand_id: { type: 'string', description: 'Brand profile for voice matching' },
+        },
+        required: ['context'],
+      },
+    },
   ],
 }))
 
@@ -1638,6 +1685,106 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 hashtags: p.hashtags,
                 imagePrompt: p.imagePrompt,
               })),
+            }, null, 2),
+          }],
+        }
+      }
+
+      // ── User-Provided Content ───────────────────────────────────────
+
+      case 'caption_and_post': {
+        const userId = await getUserId()
+        if (!userId) {
+          return { content: [{ type: 'text', text: 'Error: No user ID configured.' }] }
+        }
+
+        const context = args.context as string
+        const platforms = (args.platforms as Platform[]) || ['instagram']
+        const tone = (args.tone as string) || 'professional but approachable'
+        const includeCta = args.include_cta !== false
+        const ctaText = args.cta_text as string | undefined
+        const draftOnly = args.draft_only as boolean || false
+
+        // Generate caption using the content engine
+        const captionResult = await generateContent({
+          topic: `Write a social media caption for this content: ${context}${includeCta ? (ctaText ? `. CTA: ${ctaText}` : '. Include a relevant call-to-action.') : '. No call-to-action needed.'}`,
+          platforms,
+          contentType: 'image_caption',
+          tone,
+          brandId: args.brand_id as string | undefined,
+          userId,
+        })
+
+        if (draftOnly) {
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                draft: true,
+                captions: captionResult.variants,
+                contentPillar: captionResult.contentPillar,
+              }, null, 2),
+            }],
+          }
+        }
+
+        // Post with user's media
+        const mediaUrl = args.media_url as string
+        const mediaType = (args.media_type || 'image') as 'image' | 'video' | 'carousel'
+
+        const primaryPlatform = platforms[0]
+        const variant = captionResult.variants[primaryPlatform]
+        let finalText = variant?.text || ''
+        if (variant?.hashtags?.length && !variant.hashtags.some((tag: string) => finalText.includes(tag))) {
+          finalText += '\n\n' + variant.hashtags.join(' ')
+        }
+
+        const publishResult = await publish({
+          text: finalText,
+          platforms,
+          mediaUrls: [mediaUrl],
+          mediaType,
+          userId,
+        })
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: publishResult.success,
+              caption: finalText,
+              allCaptions: captionResult.variants,
+              publishResults: publishResult.results,
+            }, null, 2),
+          }],
+        }
+      }
+
+      case 'write_caption': {
+        const userId = await getUserId()
+        const context = args.context as string
+        const platforms = (args.platforms as Platform[]) || ['instagram', 'facebook']
+        const tone = (args.tone as string) || 'professional but approachable'
+        const includeHashtags = args.include_hashtags !== false
+        const includeCta = args.include_cta !== false
+
+        const result = await generateContent({
+          topic: `Write a social media caption for this content: ${context}${includeCta ? '. Include a relevant call-to-action.' : ''}`,
+          platforms,
+          contentType: 'image_caption',
+          tone,
+          includeHashtags,
+          brandId: args.brand_id as string | undefined,
+          userId: userId || undefined,
+        })
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              captions: result.variants,
+              contentPillar: result.contentPillar,
+              engagementHooks: result.engagementHooks,
             }, null, 2),
           }],
         }
