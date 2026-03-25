@@ -54,11 +54,14 @@ export async function GET(request: NextRequest) {
       console.error('Failed to get LinkedIn profile:', e)
     }
 
+    // Clean userId (remove any newlines/spaces)
+    const cleanUserId = userId.trim().replace(/\n/g, '')
+
     // Store connection in database
     const { error: dbError } = await supabase
       .from('platform_connections')
       .upsert({
-        user_id: userId,
+        user_id: cleanUserId,
         platform: 'linkedin',
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
@@ -67,7 +70,7 @@ export async function GET(request: NextRequest) {
         profile_name: profileName,
         profile_handle: profileHandle,
         status: 'active',
-        updated_at: new Date().toISOString(),
+        connected_at: new Date().toISOString(),
       }, {
         onConflict: 'user_id,platform',
       })
