@@ -93,7 +93,7 @@ async function generateImage(prompt: string): Promise<string | null> {
     if (!imagePart?.inlineData) return null
 
     // Upload to Supabase Storage
-    const buffer = Buffer.from(imagePart.inlineData.data, 'base64')
+    const buffer = Buffer.from(imagePart.inlineData.data!, 'base64')
     const filename = `autopilot/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`
     const supabase = getSupabase()
     await supabase.storage.from('assets').upload(filename, buffer, { contentType: 'image/png', upsert: true })
