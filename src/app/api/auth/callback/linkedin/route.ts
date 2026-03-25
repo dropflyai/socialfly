@@ -90,7 +90,14 @@ export async function GET(request: NextRequest) {
     response.cookies.delete('oauth_state')
     return response
   } catch (e) {
-    console.error('LinkedIn callback error:', e)
-    return NextResponse.redirect(new URL('/platforms?error=exchange_failed', request.url))
+    const errMsg = e instanceof Error ? e.message : 'Unknown error'
+    console.error('LinkedIn callback error:', errMsg)
+    // Return JSON error instead of redirect so we can see what failed
+    return NextResponse.json({
+      error: 'exchange_failed',
+      message: errMsg,
+      code: code?.slice(0, 10) + '...',
+      state: state?.slice(0, 20) + '...',
+    }, { status: 500 })
   }
 }
