@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { fal } from '@fal-ai/client'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
+import { deductCredits } from '@/lib/credits'
 
 fal.config({ credentials: process.env.FAL_KEY })
 
@@ -18,6 +19,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: 'Rate limit exceeded. Please wait before generating more images.' },
       { status: 429, headers: { 'Retry-After': String(Math.ceil((rateCheck.resetAt - Date.now()) / 1000)) } }
+    )
+  }
+
+  const creditResult = await deductCredits(user.id, 'image_generate')
+  if (!creditResult.success) {
+    return NextResponse.json(
+      { error: 'Insufficient credits. Please upgrade your plan.', creditsRemaining: creditResult.creditsRemaining },
+      { status: 402 }
     )
   }
 

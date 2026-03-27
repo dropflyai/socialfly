@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
-import { stripe, getPlanByPriceId, getTokenLimitForTier } from '@/lib/stripe'
+import { stripe, getPlanByPriceId, getCreditsForTier } from '@/lib/stripe'
 import { createServiceClient } from '@/lib/supabase-server'
 
 // Helper to extract subscription ID from invoice parent
@@ -162,12 +162,15 @@ async function handleSubscriptionChange(
     .update({ subscription_tier: tier })
     .eq('id', userId)
 
-  // Update token daily limit based on tier
-  const dailyLimit = getTokenLimitForTier(tier)
+  // Update monthly credit limit based on tier
+  const creditLimit = getCreditsForTier(tier)
   await supabase
-    .from('token_balances')
-    .update({ daily_limit: dailyLimit })
-    .eq('user_id', userId)
+    .from('credit_usage')
+    .upsert({
+      user_id: userId,
+      credits_limit: creditLimit,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' })
 }
 
 async function handleSubscriptionDeleted(
@@ -197,9 +200,12 @@ async function handleSubscriptionDeleted(
     .update({ subscription_tier: 'free' })
     .eq('id', userId)
 
-  // Reset token limit to free tier
+  // Reset credit limit to free tier
   await supabase
-    .from('token_balances')
-    .update({ daily_limit: 50 })
-    .eq('user_id', userId)
+    .from('credit_usage')
+    .upsert({
+      user_id: userId,
+      credits_limit: 50,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' })
 }

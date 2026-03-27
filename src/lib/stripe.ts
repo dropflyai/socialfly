@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase-server'
 import { PLANS, type Plan } from '@/lib/plans'
 
 export type { Plan }
-export { PLANS, getPlanById, getTokenLimitForTier } from '@/lib/plans'
+export { PLANS, getPlanById, getCreditsForTier, getTokenLimitForTier } from '@/lib/plans'
 
 let _stripe: Stripe | null = null
 
@@ -27,6 +27,13 @@ export const stripe = new Proxy({} as Stripe, {
 // Server-side plan lookup that resolves env-based price IDs
 function getServerPlans(): Plan[] {
   return PLANS.map((plan) => {
+    if (plan.id === 'creator') {
+      return {
+        ...plan,
+        stripePriceIdMonthly: process.env.STRIPE_PRICE_ID_CREATOR || '',
+        stripePriceIdYearly: process.env.STRIPE_PRICE_ID_CREATOR_YEARLY || '',
+      }
+    }
     if (plan.id === 'pro') {
       return {
         ...plan,

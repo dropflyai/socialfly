@@ -37,7 +37,7 @@ export function Header({ className }: HeaderProps) {
   const supabase = createBrowserClient()
   const { setMobileMenuOpen } = useUIStore()
   const [user, setUser] = useState<{ email?: string; name?: string } | null>(null)
-  const [tokenBalance, setTokenBalance] = useState<number>(0)
+  const [creditsRemaining, setCreditsRemaining] = useState<number>(0)
 
   useEffect(() => {
     const getUser = async () => {
@@ -48,15 +48,11 @@ export function Header({ className }: HeaderProps) {
           name: user.user_metadata?.full_name || user.email?.split('@')[0],
         })
 
-        // Fetch token balance
-        const { data: tokenData } = await supabase
-          .from('token_balances')
-          .select('balance')
-          .eq('user_id', user.id)
-          .single()
-
-        if (tokenData) {
-          setTokenBalance(tokenData.balance)
+        // Fetch credit usage
+        const res = await fetch('/api/credits')
+        if (res.ok) {
+          const data = await res.json()
+          setCreditsRemaining(data.remaining ?? 0)
         }
       }
     }
@@ -108,11 +104,11 @@ export function Header({ className }: HeaderProps) {
 
       {/* Right: Actions + User */}
       <div className="flex items-center gap-2 lg:gap-4">
-        {/* Token Balance */}
+        {/* Credit Balance */}
         <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary">
           <Coins className="h-4 w-4" />
-          <span className="text-sm font-medium">{tokenBalance}</span>
-          <span className="hidden lg:inline text-xs text-muted-foreground">tokens</span>
+          <span className="text-sm font-medium">{creditsRemaining}</span>
+          <span className="hidden lg:inline text-xs text-muted-foreground">credits</span>
         </div>
 
         {/* Create Button */}

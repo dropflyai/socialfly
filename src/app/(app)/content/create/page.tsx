@@ -954,7 +954,7 @@ function CreateContentContent() {
             <h2 className="text-lg font-semibold">Generated Content</h2>
             <div className="flex gap-2 flex-wrap">
               <Badge variant="secondary">{generatedContent.contentPillar}</Badge>
-              <Badge variant="outline">{generatedContent.tokensUsed} tokens used</Badge>
+              <Badge variant="outline">{generatedContent.tokensUsed} API tokens</Badge>
               {currentImageUrl && activeTab !== 'video' && <Badge variant="secondary">With image</Badge>}
               {generatedVideoUrl && activeTab === 'video' && <Badge variant="secondary">With video</Badge>}
             </div>

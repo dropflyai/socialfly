@@ -268,6 +268,50 @@ export async function postInstagramCarousel(
   return publishRes.json()
 }
 
+// Get post-level insights (engagement metrics)
+export async function getInstagramMediaInsights(
+  accessToken: string,
+  mediaId: string
+): Promise<{ impressions: number; reach: number; likes: number; comments: number; shares: number; saves: number }> {
+  const res = await fetch(
+    `${GRAPH_API_BASE}/${mediaId}/insights?metric=impressions,reach,likes,comments,shares,saved&access_token=${accessToken}`
+  )
+
+  if (!res.ok) {
+    // Fallback to basic fields if insights API fails (e.g. story or album child)
+    const basicRes = await fetch(
+      `${GRAPH_API_BASE}/${mediaId}?fields=like_count,comments_count&access_token=${accessToken}`
+    )
+    if (basicRes.ok) {
+      const basic = await basicRes.json()
+      return {
+        impressions: 0,
+        reach: 0,
+        likes: basic.like_count || 0,
+        comments: basic.comments_count || 0,
+        shares: 0,
+        saves: 0,
+      }
+    }
+    return { impressions: 0, reach: 0, likes: 0, comments: 0, shares: 0, saves: 0 }
+  }
+
+  const data = await res.json()
+  const metrics: Record<string, number> = {}
+  for (const item of (data.data || [])) {
+    metrics[item.name] = item.values?.[0]?.value ?? 0
+  }
+
+  return {
+    impressions: metrics.impressions || 0,
+    reach: metrics.reach || 0,
+    likes: metrics.likes || 0,
+    comments: metrics.comments || 0,
+    shares: metrics.shares || 0,
+    saves: metrics.saved || 0,
+  }
+}
+
 // Poll media container until it's ready
 async function waitForMediaReady(
   accessToken: string,

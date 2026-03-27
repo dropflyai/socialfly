@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { fal } from '@fal-ai/client'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
+import { deductCredits } from '@/lib/credits'
 
 fal.config({ credentials: process.env.FAL_KEY })
 
@@ -38,6 +39,15 @@ export async function POST(request: NextRequest) {
   }
 
   const modelKey = (model as VideoModel) in MODEL_CONFIG ? model as VideoModel : 'fast'
+
+  const creditAction = modelKey === 'quality' ? 'video_quality' as const : 'video_fast' as const
+  const creditResult = await deductCredits(user.id, creditAction, { model: modelKey })
+  if (!creditResult.success) {
+    return NextResponse.json(
+      { error: 'Insufficient credits. Please upgrade your plan.', creditsRemaining: creditResult.creditsRemaining },
+      { status: 402 }
+    )
+  }
   const config = MODEL_CONFIG[modelKey]
 
   try {

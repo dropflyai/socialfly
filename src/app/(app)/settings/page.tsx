@@ -35,12 +35,11 @@ interface SubscriptionData {
   plan: {
     id: string
     name: string
-    tokens: number
+    credits: number
   }
-  tokens: {
-    balance: number
-    dailySpent: number
-    dailyLimit: number
+  credits: {
+    used: number
+    limit: number
   }
   tier: string
 }
@@ -118,8 +117,8 @@ function SettingsPageContent() {
     return <Badge variant="outline" className={v.className}>{v.label}</Badge>
   }
 
-  const tokenUsagePercent = billingData
-    ? Math.min(100, Math.round((billingData.tokens.dailySpent / billingData.tokens.dailyLimit) * 100))
+  const creditUsagePercent = billingData
+    ? Math.min(100, Math.round((billingData.credits.used / billingData.credits.limit) * 100))
     : 0
 
   return (
@@ -229,7 +228,7 @@ function SettingsPageContent() {
                             : getStatusBadge('inactive')}
                         </div>
                         <p className="text-sm text-muted-foreground mt-1">
-                          {billingData?.plan.tokens || 50} tokens per day
+                          {billingData?.plan.credits || 50} credits/month
                         </p>
                       </div>
                     </div>
@@ -297,15 +296,15 @@ function SettingsPageContent() {
             </CardContent>
           </Card>
 
-          {/* Token Usage */}
+          {/* Credit Usage */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Coins className="h-5 w-5" />
-                Token Usage
+                Credit Usage
               </CardTitle>
               <CardDescription>
-                Tokens are used for AI content generation and video creation
+                Credits are used for AI captions (1), image edits (3), image generation (5), and video generation (15). Publishing is free.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -317,18 +316,18 @@ function SettingsPageContent() {
                 <>
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-muted-foreground">Daily usage</p>
+                      <p className="text-sm text-muted-foreground">Monthly usage</p>
                       <p className="text-2xl font-bold">
-                        {billingData?.tokens.dailySpent ?? 0}
+                        {billingData?.credits.used ?? 0}
                         <span className="text-base font-normal text-muted-foreground">
-                          {' '}/ {billingData?.tokens.dailyLimit ?? 50}
+                          {' '}/ {billingData?.credits.limit ?? 50}
                         </span>
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm text-muted-foreground">Available balance</p>
+                      <p className="text-sm text-muted-foreground">Remaining</p>
                       <p className="text-2xl font-bold text-primary">
-                        {billingData?.tokens.balance ?? 0}
+                        {(billingData?.credits.limit ?? 50) - (billingData?.credits.used ?? 0)}
                       </p>
                     </div>
                   </div>
@@ -338,26 +337,26 @@ function SettingsPageContent() {
                     <div className="h-3 rounded-full bg-muted overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all ${
-                          tokenUsagePercent > 90
+                          creditUsagePercent > 90
                             ? 'bg-red-500'
-                            : tokenUsagePercent > 70
+                            : creditUsagePercent > 70
                               ? 'bg-yellow-500'
                               : 'bg-primary'
                         }`}
-                        style={{ width: `${tokenUsagePercent}%` }}
+                        style={{ width: `${creditUsagePercent}%` }}
                       />
                     </div>
                     <p className="text-xs text-muted-foreground text-right">
-                      {tokenUsagePercent}% of daily limit used
+                      {creditUsagePercent}% of monthly limit used
                     </p>
                   </div>
 
-                  {tokenUsagePercent > 90 && billingData?.tier === 'free' && (
+                  {creditUsagePercent > 90 && billingData?.tier === 'free' && (
                     <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/5 border border-primary/20">
                       <AlertCircle className="h-4 w-4 text-primary shrink-0" />
                       <div className="flex-1">
                         <p className="text-sm">
-                          Running low on tokens? Upgrade to Pro for 500 tokens/day.
+                          Running low on credits? Upgrade to Creator for 500 credits/month.
                         </p>
                       </div>
                       <Button size="sm" onClick={() => router.push('/pricing')}>

@@ -15,10 +15,10 @@ export async function GET() {
     // Get subscription from database
     const subscription = await getSubscription(user.id)
 
-    // Get token balance
-    const { data: tokenData } = await supabase
-      .from('token_balances')
-      .select('balance, daily_spent, daily_limit')
+    // Get credit usage
+    const { data: creditData } = await supabase
+      .from('credit_usage')
+      .select('credits_used, credits_limit')
       .eq('user_id', user.id)
       .single()
 
@@ -46,12 +46,11 @@ export async function GET() {
       plan: {
         id: plan.id,
         name: plan.name,
-        tokens: plan.tokens,
+        credits: plan.credits,
       },
-      tokens: {
-        balance: tokenData?.balance ?? 0,
-        dailySpent: tokenData?.daily_spent ?? 0,
-        dailyLimit: tokenData?.daily_limit ?? 50,
+      credits: {
+        used: creditData?.credits_used ?? 0,
+        limit: creditData?.credits_limit ?? plan.credits,
       },
       tier,
     })

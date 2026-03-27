@@ -8,8 +8,9 @@ import {
   Sparkles,
   ArrowRight,
   Zap,
-  Building2,
+  Palette,
   Crown,
+  Building2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -23,6 +24,7 @@ export default function PricingPage() {
 
   const planIcons: Record<string, typeof Sparkles> = {
     free: Zap,
+    creator: Palette,
     pro: Crown,
     agency: Building2,
   }
@@ -73,7 +75,7 @@ export default function PricingPage() {
     <div className="min-h-screen bg-background">
       {/* Navigation */}
       <nav className="border-b border-border/50">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3">
             <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary text-primary-foreground font-bold text-sm">
               S
@@ -119,7 +121,7 @@ export default function PricingPage() {
           </h1>
 
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-10">
-            Start free. Upgrade when you're ready. All plans include a 14-day free trial on paid tiers.
+            Start free. Upgrade when you&apos;re ready. All paid plans include a 14-day free trial.
           </p>
 
           {/* Billing Toggle */}
@@ -152,8 +154,8 @@ export default function PricingPage() {
       </section>
 
       {/* Pricing Cards */}
-      <section className="relative max-w-5xl mx-auto px-6 py-12">
-        <div className="grid md:grid-cols-3 gap-6">
+      <section className="relative max-w-7xl mx-auto px-6 py-12">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
           {PLANS.map((plan) => {
             const Icon = planIcons[plan.id] || Zap
             const price = getPrice(plan)
@@ -252,8 +254,34 @@ export default function PricingPage() {
         </div>
       </section>
 
+      {/* Credit Costs Explainer */}
+      <section className="max-w-3xl mx-auto px-6 py-12">
+        <h2 className="text-2xl font-semibold text-center mb-2">How credits work</h2>
+        <p className="text-muted-foreground text-center mb-8">
+          Different actions use different amounts of credits. Publishing to platforms is always free.
+        </p>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div className="flex items-center justify-between p-4 rounded-xl bg-muted/50 border border-border/50">
+            <span className="text-sm font-medium">AI Caption / Text</span>
+            <Badge variant="secondary">1 credit</Badge>
+          </div>
+          <div className="flex items-center justify-between p-4 rounded-xl bg-muted/50 border border-border/50">
+            <span className="text-sm font-medium">AI Image Edit</span>
+            <Badge variant="secondary">3 credits</Badge>
+          </div>
+          <div className="flex items-center justify-between p-4 rounded-xl bg-muted/50 border border-border/50">
+            <span className="text-sm font-medium">AI Image Generation</span>
+            <Badge variant="secondary">5 credits</Badge>
+          </div>
+          <div className="flex items-center justify-between p-4 rounded-xl bg-muted/50 border border-border/50">
+            <span className="text-sm font-medium">AI Video Generation</span>
+            <Badge variant="secondary">15 credits</Badge>
+          </div>
+        </div>
+      </section>
+
       {/* Feature Comparison */}
-      <section className="max-w-5xl mx-auto px-6 py-12">
+      <section className="max-w-7xl mx-auto px-6 py-12">
         <h2 className="text-2xl font-semibold text-center mb-8">Compare plans</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -261,24 +289,23 @@ export default function PricingPage() {
               <tr className="border-b border-border">
                 <th className="text-left py-3 px-4 font-medium text-muted-foreground">Feature</th>
                 <th className="text-center py-3 px-4 font-medium">Free</th>
+                <th className="text-center py-3 px-4 font-medium">Creator</th>
                 <th className="text-center py-3 px-4 font-medium text-primary">Pro</th>
                 <th className="text-center py-3 px-4 font-medium">Agency</th>
               </tr>
             </thead>
             <tbody>
-              <ComparisonRow feature="Daily tokens" free="50" pro="500" agency="2,000" />
-              <ComparisonRow feature="Brand profiles" free="1" pro="3" agency="Unlimited" />
-              <ComparisonRow feature="Social platforms" free="2" pro="5" agency="5" />
-              <ComparisonRow feature="AI content generation" free={true} pro={true} agency={true} />
-              <ComparisonRow feature="Autopilot scheduling" free={false} pro={true} agency={true} />
-              <ComparisonRow feature="Advanced analytics" free={false} pro={true} agency={true} />
-              <ComparisonRow feature="Content calendar" free={false} pro={true} agency={true} />
-              <ComparisonRow feature="Video generation" free={false} pro={true} agency={true} />
-              <ComparisonRow feature="White-label reports" free={false} pro={false} agency={true} />
-              <ComparisonRow feature="Priority support" free={false} pro={false} agency={true} />
-              <ComparisonRow feature="API access" free={false} pro={false} agency={true} />
-              <ComparisonRow feature="Custom AI training" free={false} pro={false} agency={true} />
-              <ComparisonRow feature="Team collaboration" free={false} pro={false} agency={true} />
+              <ComparisonRow feature="Monthly credits" free="50" creator="500" pro="2,000" agency="5,000" />
+              <ComparisonRow feature="Brand profiles" free="1" creator="2" pro="5" agency="Unlimited" />
+              <ComparisonRow feature="Social platforms" free="2" creator="5" pro="5" agency="5" />
+              <ComparisonRow feature="Scheduled posts" free="5" creator="30" pro="Unlimited" agency="Unlimited" />
+              <ComparisonRow feature="Team members" free="1" creator="1" pro="3" agency="10" />
+              <ComparisonRow feature="AI content generation" free={true} creator={true} pro={true} agency={true} />
+              <ComparisonRow feature="Content calendar" free={false} creator={true} pro={true} agency={true} />
+              <ComparisonRow feature="Autopilot scheduling" free={false} creator={false} pro={true} agency={true} />
+              <ComparisonRow feature="Advanced analytics" free={false} creator={false} pro={true} agency={true} />
+              <ComparisonRow feature="Video generation" free={false} creator={false} pro={true} agency={true} />
+              <ComparisonRow feature="Priority support" free={false} creator={false} pro={false} agency={true} />
             </tbody>
           </table>
         </div>
@@ -307,7 +334,7 @@ export default function PricingPage() {
 
       {/* Footer */}
       <footer className="border-t border-border/50">
-        <div className="max-w-6xl mx-auto px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="max-w-7xl mx-auto px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <div className="w-6 h-6 rounded bg-primary/20 flex items-center justify-center">
               <span className="text-primary text-xs font-bold">S</span>
@@ -326,11 +353,13 @@ export default function PricingPage() {
 function ComparisonRow({
   feature,
   free,
+  creator,
   pro,
   agency,
 }: {
   feature: string
   free: string | boolean
+  creator: string | boolean
   pro: string | boolean
   agency: string | boolean
 }) {
@@ -349,6 +378,7 @@ function ComparisonRow({
     <tr className="border-b border-border/50">
       <td className="py-3 px-4 text-muted-foreground">{feature}</td>
       <td className="py-3 px-4 text-center">{renderValue(free)}</td>
+      <td className="py-3 px-4 text-center">{renderValue(creator)}</td>
       <td className="py-3 px-4 text-center bg-primary/[0.02]">{renderValue(pro)}</td>
       <td className="py-3 px-4 text-center">{renderValue(agency)}</td>
     </tr>
