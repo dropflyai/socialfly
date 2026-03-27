@@ -182,17 +182,32 @@ export default function BrandPage() {
                       <CardDescription>
                         {selectedBrand.description || 'No description'}
                       </CardDescription>
-                      {selectedBrand.source_url && (
-                        <a
-                          href={selectedBrand.source_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-primary hover:underline inline-flex items-center gap-1 mt-1"
-                        >
-                          {new URL(selectedBrand.source_url).hostname}
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
-                      )}
+                      {selectedBrand.source_url && (() => {
+                        try {
+                          const url = new URL(
+                            selectedBrand.source_url.startsWith('http')
+                              ? selectedBrand.source_url
+                              : `https://${selectedBrand.source_url}`
+                          )
+                          return (
+                            <a
+                              href={url.href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-primary hover:underline inline-flex items-center gap-1 mt-1"
+                            >
+                              {url.hostname}
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )
+                        } catch {
+                          return (
+                            <span className="text-sm text-muted-foreground mt-1">
+                              {selectedBrand.source_url}
+                            </span>
+                          )
+                        }
+                      })()}
                     </div>
                   </div>
                   <DropdownMenu>

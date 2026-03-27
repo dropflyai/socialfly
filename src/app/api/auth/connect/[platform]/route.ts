@@ -3,8 +3,10 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import crypto from 'crypto'
 import { getTwitterAuthUrl } from '@/lib/platforms/twitter'
 import { getInstagramAuthUrl } from '@/lib/platforms/instagram'
+import { getFacebookAuthUrl } from '@/lib/platforms/facebook'
 import { getTikTokAuthUrl } from '@/lib/platforms/tiktok'
 import { getLinkedInAuthUrl } from '@/lib/platforms/linkedin'
+import { checkPlatformLimit } from '@/lib/tier-gates'
 
 // GET /api/auth/connect/[platform] — initiates OAuth flow
 export async function GET(
@@ -17,6 +19,14 @@ export async function GET(
 
   if (!user) {
     return NextResponse.redirect(new URL('/auth/login', request.url))
+  }
+
+  // Check platform connection limit
+  const platformCheck = await checkPlatformLimit(user.id)
+  if (!platformCheck.allowed) {
+    return NextResponse.redirect(
+      new URL(`/platforms?error=${encodeURIComponent(platformCheck.reason || 'Platform limit reached')}`, request.url)
+    )
   }
 
   // Generate state with user ID for verification on callback
@@ -52,6 +62,10 @@ export async function GET(
 
     case 'instagram':
       authUrl = getInstagramAuthUrl(state)
+      break
+
+    case 'facebook':
+      authUrl = getFacebookAuthUrl(state)
       break
 
     case 'tiktok':

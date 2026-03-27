@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { fal } from '@fal-ai/client'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 import { deductCredits } from '@/lib/credits'
+import { checkFeatureAccess } from '@/lib/tier-gates'
 
 fal.config({ credentials: process.env.FAL_KEY })
 
@@ -29,6 +30,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: 'Rate limit exceeded. Please wait before generating more videos.' },
       { status: 429, headers: { 'Retry-After': String(Math.ceil((rateCheck.resetAt - Date.now()) / 1000)) } }
+    )
+  }
+
+  // Video generation requires Pro or higher
+  const featureCheck = await checkFeatureAccess(user.id, 'video_generation')
+  if (!featureCheck.allowed) {
+    return NextResponse.json(
+      { error: featureCheck.reason, upgradeRequired: featureCheck.upgradeRequired },
+      { status: 403 }
     )
   }
 

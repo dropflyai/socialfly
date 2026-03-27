@@ -1,7 +1,8 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import {
   LayoutDashboard,
@@ -17,70 +18,36 @@ import {
   FolderOpen,
   Megaphone,
   LayoutTemplate,
+  Lock,
 } from 'lucide-react'
 import { useUIStore } from '@/stores/ui-store'
 import { Button } from '@/components/ui/button'
 
-const mainNavItems = [
-  {
-    title: 'Dashboard',
-    href: '/dashboard',
-    icon: LayoutDashboard,
-  },
-  {
-    title: 'Brand',
-    href: '/brand',
-    icon: Palette,
-  },
-  {
-    title: 'Content',
-    href: '/content',
-    icon: Sparkles,
-  },
-  {
-    title: 'Media',
-    href: '/media',
-    icon: FolderOpen,
-  },
-  {
-    title: 'Schedule',
-    href: '/schedule',
-    icon: Calendar,
-  },
-  {
-    title: 'Campaigns',
-    href: '/campaigns',
-    icon: Megaphone,
-  },
-  {
-    title: 'Templates',
-    href: '/templates',
-    icon: LayoutTemplate,
-  },
-  {
-    title: 'Automations',
-    href: '/automations',
-    icon: Zap,
-  },
-  {
-    title: 'Analytics',
-    href: '/analytics',
-    icon: BarChart3,
-  },
+interface NavItem {
+  title: string
+  href: string
+  icon: typeof LayoutDashboard
+  minTier?: 'creator' | 'pro' | 'agency' // undefined = available to all
+}
+
+const mainNavItems: NavItem[] = [
+  { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { title: 'Brand', href: '/brand', icon: Palette },
+  { title: 'Content', href: '/content', icon: Sparkles },
+  { title: 'Media', href: '/media', icon: FolderOpen },
+  { title: 'Schedule', href: '/schedule', icon: Calendar },
+  { title: 'Campaigns', href: '/campaigns', icon: Megaphone },
+  { title: 'Templates', href: '/templates', icon: LayoutTemplate },
+  { title: 'Automations', href: '/automations', icon: Zap, minTier: 'pro' },
+  { title: 'Analytics', href: '/analytics', icon: BarChart3 },
 ]
 
-const secondaryNavItems = [
-  {
-    title: 'Platforms',
-    href: '/platforms',
-    icon: Link2,
-  },
-  {
-    title: 'Settings',
-    href: '/settings',
-    icon: Settings,
-  },
+const secondaryNavItems: NavItem[] = [
+  { title: 'Platforms', href: '/platforms', icon: Link2 },
+  { title: 'Settings', href: '/settings', icon: Settings },
 ]
+
+const TIER_ORDER = ['free', 'creator', 'pro', 'agency']
 
 interface SidebarProps {
   className?: string
@@ -88,7 +55,72 @@ interface SidebarProps {
 
 export function Sidebar({ className }: SidebarProps) {
   const pathname = usePathname()
+  const router = useRouter()
   const { sidebarCollapsed, setSidebarCollapsed } = useUIStore()
+  const [userTier, setUserTier] = useState<string>('free')
+
+  useEffect(() => {
+    fetch('/api/tier')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.tier) setUserTier(data.tier)
+      })
+      .catch(() => {})
+  }, [])
+
+  function isTierSufficient(minTier?: string): boolean {
+    if (!minTier) return true
+    return TIER_ORDER.indexOf(userTier) >= TIER_ORDER.indexOf(minTier)
+  }
+
+  function renderNavItem(item: NavItem) {
+    const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
+    const isLocked = !isTierSufficient(item.minTier)
+
+    if (isLocked) {
+      return (
+        <button
+          key={item.href}
+          onClick={() => router.push('/pricing')}
+          className={cn(
+            'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all w-full',
+            'text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/30 cursor-pointer',
+            sidebarCollapsed && 'justify-center px-2'
+          )}
+          title={sidebarCollapsed ? `${item.title} (${item.minTier}+ plan)` : undefined}
+        >
+          <item.icon className="h-5 w-5 flex-shrink-0 opacity-50" />
+          {!sidebarCollapsed && (
+            <>
+              <span className="opacity-50">{item.title}</span>
+              <Lock className="h-3 w-3 ml-auto opacity-40" />
+            </>
+          )}
+        </button>
+      )
+    }
+
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        className={cn(
+          'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
+          isActive
+            ? 'bg-primary/10 text-primary'
+            : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
+          sidebarCollapsed && 'justify-center px-2'
+        )}
+        title={sidebarCollapsed ? item.title : undefined}
+      >
+        <item.icon className={cn(
+          'h-5 w-5 flex-shrink-0 transition-colors',
+          isActive ? 'text-primary' : ''
+        )} />
+        {!sidebarCollapsed && <span>{item.title}</span>}
+      </Link>
+    )
+  }
 
   return (
     <aside
@@ -114,29 +146,7 @@ export function Sidebar({ className }: SidebarProps) {
 
       {/* Main Navigation */}
       <nav className="flex-1 px-3 py-6 space-y-1 overflow-y-auto">
-        {mainNavItems.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
-                isActive
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
-                sidebarCollapsed && 'justify-center px-2'
-              )}
-              title={sidebarCollapsed ? item.title : undefined}
-            >
-              <item.icon className={cn(
-                'h-5 w-5 flex-shrink-0 transition-colors',
-                isActive ? 'text-primary' : ''
-              )} />
-              {!sidebarCollapsed && <span>{item.title}</span>}
-            </Link>
-          )
-        })}
+        {mainNavItems.map(renderNavItem)}
 
         <div className="py-4">
           <div className={cn(
@@ -145,29 +155,7 @@ export function Sidebar({ className }: SidebarProps) {
           )} />
         </div>
 
-        {secondaryNavItems.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
-                isActive
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
-                sidebarCollapsed && 'justify-center px-2'
-              )}
-              title={sidebarCollapsed ? item.title : undefined}
-            >
-              <item.icon className={cn(
-                'h-5 w-5 flex-shrink-0 transition-colors',
-                isActive ? 'text-primary' : ''
-              )} />
-              {!sidebarCollapsed && <span>{item.title}</span>}
-            </Link>
-          )
-        })}
+        {secondaryNavItems.map(renderNavItem)}
       </nav>
 
       {/* Collapse Button */}

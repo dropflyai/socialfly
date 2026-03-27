@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient, createServiceClient } from '@/lib/supabase-server'
+import { checkFeatureAccess } from '@/lib/tier-gates'
 
 // GET /api/automations — list automation rules
 export async function GET(request: NextRequest) {
@@ -40,6 +41,15 @@ export async function POST(request: NextRequest) {
 
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // Autopilot requires Pro or higher
+  const featureCheck = await checkFeatureAccess(user.id, 'autopilot')
+  if (!featureCheck.allowed) {
+    return NextResponse.json(
+      { error: featureCheck.reason, upgradeRequired: featureCheck.upgradeRequired },
+      { status: 403 }
+    )
   }
 
   const body = await request.json()

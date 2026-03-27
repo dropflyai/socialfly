@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { analyzeBrand, analysisToProfileData, validateUrl } from '@/lib/brand/analyzer'
+import { checkBrandLimit } from '@/lib/tier-gates'
 
 export const maxDuration = 60 // Allow up to 60 seconds for analysis
 
@@ -14,6 +15,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
+      )
+    }
+
+    // Check brand limit for user's tier
+    const brandCheck = await checkBrandLimit(user.id)
+    if (!brandCheck.allowed) {
+      return NextResponse.json(
+        { error: brandCheck.reason, upgradeRequired: brandCheck.upgradeRequired },
+        { status: 403 }
       )
     }
 

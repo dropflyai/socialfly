@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient, createServiceClient } from '@/lib/supabase-server'
 import { publishToMultiplePlatforms } from '@/lib/platforms'
+import { checkScheduleLimit } from '@/lib/tier-gates'
 
 interface PublishRequest {
   contentId?: string
@@ -29,8 +30,15 @@ export async function POST(request: NextRequest) {
 
   const serviceClient = createServiceClient()
 
-  // If scheduling for later, create a scheduled_posts record
+  // If scheduling for later, check schedule limit then create record
   if (scheduleFor) {
+    const scheduleCheck = await checkScheduleLimit(user.id)
+    if (!scheduleCheck.allowed) {
+      return NextResponse.json(
+        { error: scheduleCheck.reason, upgradeRequired: scheduleCheck.upgradeRequired },
+        { status: 403 }
+      )
+    }
     const scheduledTime = new Date(scheduleFor)
     if (scheduledTime <= new Date()) {
       return NextResponse.json({ error: 'Schedule time must be in the future' }, { status: 400 })

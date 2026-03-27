@@ -19,18 +19,24 @@ interface PlatformConnection {
   error_message: string | null
 }
 
-const platformConfig: Record<string, { name: string; description: string; icon: string; color: string }> = {
-  twitter: {
-    name: 'X (Twitter)',
-    description: 'Share thoughts and updates',
-    icon: '\ud835\udd4f',
-    color: 'from-gray-900 to-gray-700',
-  },
+const platformConfig: Record<string, { name: string; description: string; icon: string; color: string; comingSoon?: boolean }> = {
   instagram: {
     name: 'Instagram',
     description: 'Share photos, videos, and stories',
     icon: '\ud83d\udcf8',
     color: 'from-purple-500 via-pink-500 to-orange-500',
+  },
+  facebook: {
+    name: 'Facebook',
+    description: 'Post to your Facebook Page',
+    icon: '\ud83d\udc4d',
+    color: 'from-blue-600 to-blue-400',
+  },
+  linkedin: {
+    name: 'LinkedIn',
+    description: 'Share professional updates and articles',
+    icon: '\ud83d\udcbc',
+    color: 'from-blue-700 to-blue-500',
   },
   tiktok: {
     name: 'TikTok',
@@ -38,9 +44,16 @@ const platformConfig: Record<string, { name: string; description: string; icon: 
     icon: '\ud83c\udfb5',
     color: 'from-black to-gray-800',
   },
+  twitter: {
+    name: 'X (Twitter)',
+    description: 'Share thoughts and updates',
+    icon: '\ud835\udd4f',
+    color: 'from-gray-900 to-gray-700',
+    comingSoon: true,
+  },
 }
 
-const supportedPlatforms = ['twitter', 'instagram', 'tiktok']
+const supportedPlatforms = ['instagram', 'facebook', 'linkedin', 'tiktok', 'twitter']
 
 export default function PlatformsPage() {
   return (
@@ -138,9 +151,10 @@ function PlatformsContent() {
             const connection = getConnection(platformId)
             const isConnected = connection?.status === 'active'
             const hasError = connection?.status === 'error'
+            const isComingSoon = config.comingSoon
 
             return (
-              <Card key={platformId} className="relative overflow-hidden">
+              <Card key={platformId} className={`relative overflow-hidden ${isComingSoon ? 'opacity-60' : ''}`}>
                 <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${config.color}`} />
                 <CardHeader>
                   <div className="flex items-start justify-between">
@@ -151,7 +165,11 @@ function PlatformsContent() {
                         <CardDescription className="text-sm">{config.description}</CardDescription>
                       </div>
                     </div>
-                    {isConnected ? (
+                    {isComingSoon ? (
+                      <Badge variant="outline" className="gap-1 text-muted-foreground">
+                        Coming Soon
+                      </Badge>
+                    ) : isConnected ? (
                       <Badge variant="secondary" className="gap-1">
                         <CheckCircle2 className="h-3 w-3 text-green-500" />
                         Connected
@@ -170,7 +188,12 @@ function PlatformsContent() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {isConnected ? (
+                  {isComingSoon ? (
+                    <Button disabled className="w-full gap-2">
+                      <Plus className="h-4 w-4" />
+                      Coming Soon
+                    </Button>
+                  ) : isConnected ? (
                     <div className="space-y-3">
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-muted-foreground">Account:</span>
