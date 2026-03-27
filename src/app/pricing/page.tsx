@@ -274,8 +274,12 @@ export default function PricingPage() {
             <Badge variant="secondary">5 credits</Badge>
           </div>
           <div className="flex items-center justify-between p-4 rounded-xl bg-muted/50 border border-border/50">
-            <span className="text-sm font-medium">AI Video Generation</span>
-            <Badge variant="secondary">15 credits</Badge>
+            <span className="text-sm font-medium">AI Video (Fast)</span>
+            <Badge variant="secondary">25 credits</Badge>
+          </div>
+          <div className="flex items-center justify-between p-4 rounded-xl bg-muted/50 border border-border/50 sm:col-span-2">
+            <span className="text-sm font-medium">AI Video (Quality)</span>
+            <Badge variant="secondary">50 credits</Badge>
           </div>
         </div>
       </section>
