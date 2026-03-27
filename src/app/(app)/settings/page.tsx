@@ -304,7 +304,7 @@ function SettingsPageContent() {
                 Credit Usage
               </CardTitle>
               <CardDescription>
-                Credits are used for AI captions (1), image edits (3), image generation (5), and video generation (15). Publishing is free.
+                Credits are used for AI captions (1), image edits (3), image generation (5), and video generation (25-50). Publishing is free.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
