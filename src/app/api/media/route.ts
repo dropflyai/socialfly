@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient, createServiceClient } from '@/lib/supabase-server'
 
-const BUCKET_NAME = 'media'
+const BUCKET_NAME = 'media-assets'
 
 // GET /api/media — list user's media assets
 export async function GET(request: NextRequest) {
