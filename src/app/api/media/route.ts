@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient, createServiceClient } from '@/lib/supabase-server'
 
-const BUCKET_NAME = 'media-library'
+const BUCKET_NAME = 'media'
 
 // GET /api/media — list user's media assets
 export async function GET(request: NextRequest) {
@@ -17,19 +17,36 @@ export async function GET(request: NextRequest) {
   const serviceClient = createServiceClient()
   let query = serviceClient
     .from('brand_assets')
-    .select('*')
+    .select('id, user_id, asset_type, file_name, file_url, file_size, mime_type, title, description, tags, usage_count, last_used_at, created_at')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
     .limit(100)
 
-  if (type && type !== 'all') query = query.eq('type', type)
-  if (category && category !== 'all') query = query.eq('category', category)
-  if (search) query = query.or(`name.ilike.%${search}%,description.ilike.%${search}%,tags.cs.{${search}}`)
+  if (type && type !== 'all') query = query.eq('asset_type', type)
+  if (search) query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%,tags.cs.{${search}}`)
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  return NextResponse.json({ assets: data || [] })
+  // Map DB columns to frontend expected shape
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const assets = (data || []).map((a: any) => ({
+    id: a.id,
+    type: a.asset_type,
+    category: 'general',
+    name: a.title || a.file_name,
+    description: a.description,
+    url: a.file_url,
+    thumbnail_url: null,
+    mime_type: a.mime_type,
+    file_size: a.file_size,
+    tags: a.tags || [],
+    usage_count: a.usage_count || 0,
+    last_used_at: a.last_used_at,
+    created_at: a.created_at,
+  }))
+
+  return NextResponse.json({ assets })
 }
 
 // POST /api/media — upload a new media asset
@@ -65,16 +82,6 @@ export async function POST(request: NextRequest) {
 
   const serviceClient = createServiceClient()
 
-  // Ensure bucket exists
-  const { data: buckets } = await serviceClient.storage.listBuckets()
-  if (!buckets?.find((b: { name: string }) => b.name === BUCKET_NAME)) {
-    await serviceClient.storage.createBucket(BUCKET_NAME, {
-      public: true,
-      fileSizeLimit: 100 * 1024 * 1024,
-      allowedMimeTypes: ['image/*', 'video/*'],
-    })
-  }
-
   // Upload to Supabase Storage
   const ext = file.name.split('.').pop() || 'bin'
   const storagePath = `${user.id}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`
@@ -103,10 +110,10 @@ export async function POST(request: NextRequest) {
     .from('brand_assets')
     .insert({
       user_id: user.id,
-      type: assetType,
-      category,
-      name: name || file.name,
-      url: urlData.publicUrl,
+      asset_type: assetType,
+      title: name || file.name,
+      file_name: file.name,
+      file_url: urlData.publicUrl,
       mime_type: file.type,
       file_size: file.size,
       tags: tagArray,
@@ -119,7 +126,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: `Failed to save asset: ${dbError.message}` }, { status: 500 })
   }
 
-  return NextResponse.json({ asset })
+  // Return in the frontend expected shape
+  return NextResponse.json({
+    asset: {
+      id: asset.id,
+      type: asset.asset_type,
+      name: asset.title || asset.file_name,
+      url: asset.file_url,
+      mime_type: asset.mime_type,
+      file_size: asset.file_size,
+      tags: asset.tags,
+      created_at: asset.created_at,
+    },
+  })
 }
 
 // DELETE /api/media?id=xxx — delete a media asset
@@ -137,7 +156,7 @@ export async function DELETE(request: NextRequest) {
   // Get the asset to find the storage path
   const { data: asset } = await serviceClient
     .from('brand_assets')
-    .select('url')
+    .select('file_url')
     .eq('id', assetId)
     .eq('user_id', user.id)
     .single()
@@ -145,8 +164,8 @@ export async function DELETE(request: NextRequest) {
   if (!asset) return NextResponse.json({ error: 'Asset not found' }, { status: 404 })
 
   // Delete from storage if it's a Supabase URL
-  if (asset.url.includes(BUCKET_NAME)) {
-    const storagePath = asset.url.split(`${BUCKET_NAME}/`).pop()
+  if (asset.file_url?.includes(BUCKET_NAME)) {
+    const storagePath = asset.file_url.split(`${BUCKET_NAME}/`).pop()
     if (storagePath) {
       await serviceClient.storage.from(BUCKET_NAME).remove([storagePath])
     }
