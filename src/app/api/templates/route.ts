@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     .from('content_templates')
     .select('*')
     .eq('user_id', user.id)
-    .order('usage_count', { ascending: false })
+    .order('created_at', { ascending: false })
     .limit(50)
 
   if (platform && platform !== 'all') query = query.eq('platform', platform)
@@ -48,14 +48,11 @@ export async function POST(request: NextRequest) {
     .from('content_templates')
     .insert({
       user_id: user.id,
-      name,
-      description: description || null,
+      template_name: name,
       platform,
-      content_type: contentType || 'text',
-      template,
+      template_type: contentType || 'text',
+      template_content: template,
       variables,
-      tags: tags || [],
-      usage_count: 0,
     })
     .select()
     .single()
