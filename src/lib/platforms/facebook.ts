@@ -28,7 +28,7 @@ export function getFacebookAuthUrl(state: string): string {
   const params = new URLSearchParams({
     client_id: process.env.META_APP_ID!,
     redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback/facebook`,
-    scope: 'pages_manage_posts,pages_read_engagement,pages_show_list,pages_read_user_content,read_insights',
+    scope: 'pages_manage_posts,pages_read_engagement,pages_show_list,business_management',
     response_type: 'code',
     state,
   })
