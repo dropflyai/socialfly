@@ -305,22 +305,33 @@ async function editWithNanoBanana(
 
   // Download the image
   const imageRes = await fetch(imageUrl)
-  if (!imageRes.ok) throw new Error('Failed to download image for editing')
+  if (!imageRes.ok) throw new Error(`Failed to download image for editing: ${imageRes.status}`)
   const imageBuffer = Buffer.from(await imageRes.arrayBuffer())
-  const mimeType = imageRes.headers.get('content-type') || 'image/jpeg'
+  let mimeType = imageRes.headers.get('content-type') || 'image/jpeg'
+
+  // Ensure valid image mime type — storage URLs sometimes return wrong content-type
+  if (!mimeType.startsWith('image/')) {
+    mimeType = 'image/jpeg'
+  }
+
+  console.log(`[Image Edit] Downloading ${imageUrl.slice(0, 80)}... Size: ${imageBuffer.length} bytes, MIME: ${mimeType}`)
+
+  if (imageBuffer.length < 100) {
+    throw new Error('Downloaded image is too small — likely not a valid image file')
+  }
 
   const response = await genai.models.generateContent({
     model: 'gemini-2.0-flash-exp-image-generation',
     contents: [{
       role: 'user',
       parts: [
+        { text: `Edit this image: ${editPrompt}` },
         {
           inlineData: {
             mimeType,
             data: imageBuffer.toString('base64'),
           },
         },
-        { text: editPrompt },
       ],
     }],
     config: {
@@ -394,30 +405,8 @@ export async function smartEditImage(
   imageUrl: string,
   editPrompt: string
 ): Promise<GeneratedImage & { provider: string }> {
-  // Use Fal AI image-to-image (more reliable than Gemini image generation)
-  const config = getConfig()
-  if (!config.falApiKey) throw new Error('FAL_KEY not configured')
-
-  fal.config({ credentials: config.falApiKey })
-
-  const result = await fal.subscribe('fal-ai/flux/dev/image-to-image', {
-    input: {
-      image_url: imageUrl,
-      prompt: editPrompt,
-      strength: 0.65,
-      num_images: 1,
-    },
-  })
-
-  const images = (result.data as { images?: { url: string }[] }).images
-  if (!images?.length) throw new Error('No edited image generated')
-
-  return {
-    url: images[0].url,
-    prompt: editPrompt,
-    enhancedPrompt: editPrompt,
-    provider: 'fal',
-  }
+  const result = await editWithNanoBanana(imageUrl, editPrompt)
+  return { ...result, provider: 'gemini' }
 }
 
 /**
