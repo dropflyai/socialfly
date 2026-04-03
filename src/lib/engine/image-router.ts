@@ -263,7 +263,7 @@ async function generateWithNanoBanana(
   const genai = new GoogleGenAI({ apiKey: config.geminiApiKey })
 
   const response = await genai.models.generateContent({
-    model: 'gemini-2.0-flash',
+    model: 'gemini-2.0-flash-preview-image-generation',
     contents: [{
       role: 'user',
       parts: [{ text: prompt }],
@@ -310,7 +310,7 @@ async function editWithNanoBanana(
   const mimeType = imageRes.headers.get('content-type') || 'image/jpeg'
 
   const response = await genai.models.generateContent({
-    model: 'gemini-2.0-flash',
+    model: 'gemini-2.0-flash-preview-image-generation',
     contents: [{
       role: 'user',
       parts: [
