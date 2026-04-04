@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { type, config, platforms } = body
+  const { type, config, platforms, brandId } = body
 
   if (!type || !platforms?.length) {
     return NextResponse.json({ error: 'Type and platforms required' }, { status: 400 })
@@ -37,15 +37,20 @@ export async function POST(request: NextRequest) {
   const contentExamples = (config?.contentExamples as string) || ''
   const userIndustry = (config?.industry as string) || ''
 
-  // Load brand context
+  // Load brand context — use specific brand if provided
   const serviceClient = createServiceClient()
   let brandContext = ''
-  const { data: brand } = await serviceClient
+  let brandQuery = serviceClient
     .from('brand_profiles')
     .select('name, voice_tone, voice_description, target_audience, content_pillars')
-    .eq('user_id', user.id)
-    .limit(1)
-    .single()
+
+  if (brandId) {
+    brandQuery = brandQuery.eq('id', brandId)
+  } else {
+    brandQuery = brandQuery.eq('user_id', user.id).limit(1)
+  }
+
+  const { data: brand } = await brandQuery.single()
 
   if (brand) {
     brandContext = `Brand: ${brand.name}. Tone: ${brand.voice_tone || userTone}. Audience: ${brand.target_audience || 'general'}. Pillars: ${(brand.content_pillars || []).join(', ')}.`

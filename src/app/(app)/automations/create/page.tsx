@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Zap, Calendar, Newspaper, ShoppingBag, RefreshCw,
@@ -72,6 +72,22 @@ export default function CreateAutomationPage() {
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Brand profiles
+  const [brands, setBrands] = useState<{ id: string; name: string }[]>([])
+  const [selectedBrandId, setSelectedBrandId] = useState<string>('')
+
+  useEffect(() => {
+    fetch('/api/brand/analyze')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.brandProfiles?.length) {
+          setBrands(data.brandProfiles.map((b: { id: string; name: string }) => ({ id: b.id, name: b.name })))
+          setSelectedBrandId(data.brandProfiles[0].id)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
   // Content configuration
   const [topics, setTopics] = useState('')
   const [tone, setTone] = useState('Professional')
@@ -125,6 +141,7 @@ export default function CreateAutomationPage() {
           config,
           platforms: selectedPlatforms,
           schedule: selectedSchedule,
+          brandId: selectedBrandId || undefined,
         }),
       })
 
@@ -205,6 +222,28 @@ export default function CreateAutomationPage() {
       {step === 2 && (
         <div className="space-y-5">
           <h2 className="text-lg font-semibold">Configure your content</h2>
+
+          {/* Brand selector */}
+          {brands.length > 0 && (
+            <div className="space-y-2">
+              <Label>Brand Profile</Label>
+              <div className="grid gap-2">
+                {brands.map(brand => (
+                  <button
+                    key={brand.id}
+                    onClick={() => setSelectedBrandId(brand.id)}
+                    className={`p-3 rounded-lg border text-sm font-medium text-left transition-all ${
+                      selectedBrandId === brand.id ? 'ring-2 ring-primary bg-primary/5' : 'hover:border-primary/50'
+                    }`}
+                  >
+                    {brand.name}
+                    {selectedBrandId === brand.id && <Check className="h-4 w-4 text-primary inline ml-2" />}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">Content will use this brand's voice, tone, and audience</p>
+            </div>
+          )}
 
           {/* Topics — shown for content_calendar and ai_news */}
           {(selectedType === 'content_calendar' || selectedType === 'ai_news') && (
@@ -412,6 +451,12 @@ export default function CreateAutomationPage() {
               <CardTitle className="text-base">Summary</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              {selectedBrandId && brands.length > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Brand</span>
+                  <span className="font-medium">{brands.find(b => b.id === selectedBrandId)?.name}</span>
+                </div>
+              )}
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Type</span>
                 <Badge>{automationTypes.find(t => t.id === selectedType)?.name}</Badge>

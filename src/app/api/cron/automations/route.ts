@@ -17,6 +17,7 @@ function getSupabase() {
 interface AutomationRule {
   id: string
   user_id: string
+  brand_id: string | null
   name: string
   trigger_type: string
   trigger_config: {
@@ -179,14 +180,19 @@ async function executeAutomation(
   // Deduct caption credit
   await deductCredits(rule.user_id, 'caption', { automation_rule_id: rule.id })
 
-  // Load brand context if available
+  // Load brand context — use the linked brand_id, or fall back to first brand
   let brandContext = ''
-  const { data: brand } = await supabase
+  let brandQuery = supabase
     .from('brand_profiles')
     .select('name, voice_tone, voice_description, target_audience, content_pillars')
-    .eq('user_id', rule.user_id)
-    .limit(1)
-    .single()
+
+  if (rule.brand_id) {
+    brandQuery = brandQuery.eq('id', rule.brand_id)
+  } else {
+    brandQuery = brandQuery.eq('user_id', rule.user_id).limit(1)
+  }
+
+  const { data: brand } = await brandQuery.single()
 
   if (brand) {
     brandContext = `Brand: ${brand.name}. Tone: ${brand.voice_tone || userTone}. Audience: ${brand.target_audience || 'general'}. Content pillars: ${(brand.content_pillars || []).join(', ')}.`
