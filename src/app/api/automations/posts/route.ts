@@ -34,7 +34,8 @@ export async function GET(request: NextRequest) {
     .limit(20)
 
   // Calculate stats
-  const posted = (history || []).filter(p => p.status === 'posted')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const posted = (history || []).filter((p: any) => p.status === 'posted')
   let totalLikes = 0
   let totalComments = 0
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -49,7 +50,8 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({
-    upcoming: (upcoming || []).map(p => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    upcoming: (upcoming || []).map((p: any) => ({
       id: p.id,
       status: p.status,
       platforms: p.platforms,
@@ -58,7 +60,8 @@ export async function GET(request: NextRequest) {
       mediaUrls: (p.custom_content as { media_urls?: string[] })?.media_urls || [],
       createdAt: p.created_at,
     })),
-    history: (history || []).map(p => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    history: (history || []).map((p: any) => ({
       id: p.id,
       status: p.status,
       platforms: p.platforms,
@@ -73,8 +76,8 @@ export async function GET(request: NextRequest) {
       totalLikes,
       totalComments,
       totalEngagement: totalLikes + totalComments,
-      pendingCount: (upcoming || []).filter(p => p.status === 'draft').length,
-      scheduledCount: (upcoming || []).filter(p => p.status === 'scheduled').length,
+      pendingCount: (upcoming || []).filter((p: any) => p.status === 'draft').length,
+      scheduledCount: (upcoming || []).filter((p: any) => p.status === 'scheduled').length,
     },
   })
 }
