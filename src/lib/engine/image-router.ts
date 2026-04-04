@@ -263,7 +263,7 @@ async function generateWithNanoBanana(
   const genai = new GoogleGenAI({ apiKey: config.geminiApiKey })
 
   const response = await genai.models.generateContent({
-    model: 'gemini-2.0-flash-exp-image-generation',
+    model: 'gemini-2.5-flash-image',
     contents: [{
       role: 'user',
       parts: [{ text: prompt }],
@@ -321,7 +321,7 @@ async function editWithNanoBanana(
   }
 
   const response = await genai.models.generateContent({
-    model: 'gemini-2.0-flash-exp-image-generation',
+    model: 'gemini-2.5-flash-image',
     contents: [{
       role: 'user',
       parts: [
@@ -399,12 +399,20 @@ export async function smartGenerateImage(
 }
 
 /**
- * Edit an existing image using Fal AI image-to-image.
+ * Edit an existing image. Tries Gemini first, falls back to Fal AI.
  */
 export async function smartEditImage(
   imageUrl: string,
   editPrompt: string
 ): Promise<GeneratedImage & { provider: string }> {
+  try {
+    const result = await editWithNanoBanana(imageUrl, editPrompt)
+    return { ...result, provider: 'gemini' }
+  } catch (err) {
+    console.error('Gemini edit failed, falling back to Fal AI:', err instanceof Error ? err.message : err)
+  }
+
+  // Fallback to Fal AI
   const config = getConfig()
   fal.config({ credentials: config.falApiKey || process.env.FAL_KEY })
 
