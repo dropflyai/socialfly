@@ -95,6 +95,7 @@ export async function POST(request: NextRequest) {
       action_type: actionTypeResolved,
       action_config: { ...(actionConfig || {}), platforms: platforms || ['instagram'] },
       is_active: true,
+      next_trigger_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(), // First run in 5 minutes
       trigger_count: 0,
       success_count: 0,
       failure_count: 0,
