@@ -20,6 +20,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { createBrowserClient } from '@/lib/supabase-client'
+import { OnboardingChecklist } from '@/components/OnboardingChecklist'
 import {
   ArrowRight,
   Sparkles,
@@ -141,6 +142,11 @@ export default function DashboardPage() {
             ? 'Connect your social accounts to start posting.'
             : "Here's your content status."}
         </p>
+      </div>
+
+      {/* Onboarding Checklist */}
+      <div className="mb-6">
+        <OnboardingChecklist />
       </div>
 
       {/* PRIMARY ACTION AREA - Dominant, not equal to other elements */}
