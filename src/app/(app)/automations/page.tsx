@@ -129,6 +129,9 @@ export default function AutomationsPage() {
               <div className="flex items-center gap-2 mb-1">
                 <Zap className="h-4 w-4 text-yellow-500" />
                 <h3 className="font-semibold">{rule.name}</h3>
+                {(rule as unknown as { is_campaign?: boolean }).is_campaign && (
+                  <Badge variant="outline" className="bg-purple-500/10 text-purple-500 border-purple-500/30 text-[10px]">Campaign</Badge>
+                )}
               </div>
               <div className="flex items-center gap-2 mt-2">
                 <Badge variant="outline" className={typeInfo.color}>{typeInfo.label}</Badge>

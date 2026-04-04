@@ -47,6 +47,11 @@ export async function GET(request: NextRequest) {
     last_run: r.last_triggered_at,
     run_count: r.trigger_count || 0,
     created_at: r.created_at,
+    is_campaign: r.is_campaign || false,
+    campaign_start: r.campaign_start,
+    campaign_end: r.campaign_end,
+    campaign_goal: r.campaign_goal,
+    campaign_goal_target: r.campaign_goal_target,
   }))
 
   return NextResponse.json({ rules: mapped })
@@ -71,7 +76,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { name, type, config, actionType, actionConfig, description, platforms, schedule, brandId } = body
+  const { name, type, config, actionType, actionConfig, description, platforms, schedule, brandId, isCampaign, campaignStart, campaignEnd, campaignGoal, campaignGoalTarget } = body
 
   if (!name || !type) {
     return NextResponse.json({ error: 'Missing name or type' }, { status: 400 })
@@ -95,10 +100,17 @@ export async function POST(request: NextRequest) {
       action_type: actionTypeResolved,
       action_config: { ...(actionConfig || {}), platforms: platforms || ['instagram'] },
       is_active: true,
-      next_trigger_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      next_trigger_at: isCampaign && campaignStart
+        ? new Date(campaignStart).toISOString()
+        : new Date(Date.now() + 5 * 60 * 1000).toISOString(),
       trigger_count: 0,
       success_count: 0,
       failure_count: 0,
+      is_campaign: isCampaign || false,
+      campaign_start: campaignStart || null,
+      campaign_end: campaignEnd || null,
+      campaign_goal: campaignGoal || null,
+      campaign_goal_target: campaignGoalTarget || null,
     })
     .select()
     .single()
@@ -154,6 +166,11 @@ export async function PATCH(request: NextRequest) {
   if (body.actionType !== undefined) updateData.action_type = body.actionType
   if (body.actionConfig !== undefined) updateData.action_config = body.actionConfig
   if (body.brandId !== undefined) updateData.brand_id = body.brandId || null
+  if (body.isCampaign !== undefined) updateData.is_campaign = body.isCampaign
+  if (body.campaignStart !== undefined) updateData.campaign_start = body.campaignStart || null
+  if (body.campaignEnd !== undefined) updateData.campaign_end = body.campaignEnd || null
+  if (body.campaignGoal !== undefined) updateData.campaign_goal = body.campaignGoal || null
+  if (body.campaignGoalTarget !== undefined) updateData.campaign_goal_target = body.campaignGoalTarget || null
   if (body.runNow === true) {
     updateData.next_trigger_at = new Date().toISOString()
     updateData.last_triggered_at = null // Reset so isDue returns true

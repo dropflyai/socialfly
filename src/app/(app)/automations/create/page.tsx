@@ -99,6 +99,13 @@ export default function CreateAutomationPage() {
   const [industry, setIndustry] = useState('')
   const [contentExamples, setContentExamples] = useState('')
 
+  // Campaign fields
+  const [isCampaign, setIsCampaign] = useState(false)
+  const [campaignStart, setCampaignStart] = useState('')
+  const [campaignEnd, setCampaignEnd] = useState('')
+  const [campaignGoal, setCampaignGoal] = useState('')
+  const [campaignGoalTarget, setCampaignGoalTarget] = useState('')
+
   const totalSteps = 5
 
   function togglePlatform(id: string) {
@@ -142,6 +149,11 @@ export default function CreateAutomationPage() {
           platforms: selectedPlatforms,
           schedule: selectedSchedule,
           brandId: selectedBrandId || undefined,
+          isCampaign,
+          campaignStart: isCampaign && campaignStart ? new Date(campaignStart).toISOString() : undefined,
+          campaignEnd: isCampaign && campaignEnd ? new Date(campaignEnd).toISOString() : undefined,
+          campaignGoal: isCampaign && campaignGoal ? campaignGoal : undefined,
+          campaignGoalTarget: isCampaign && campaignGoalTarget ? parseInt(campaignGoalTarget) : undefined,
         }),
       })
 
@@ -411,7 +423,7 @@ export default function CreateAutomationPage() {
 
       {/* Step 4: Choose Schedule */}
       {step === 4 && (
-        <div className="space-y-3">
+        <div className="space-y-4">
           <h2 className="text-lg font-semibold">How often?</h2>
           {schedules.map(sched => (
             <Card
@@ -428,6 +440,69 @@ export default function CreateAutomationPage() {
               </CardContent>
             </Card>
           ))}
+
+          {/* Campaign toggle */}
+          <div className="pt-2">
+            <div className="flex items-center justify-between p-3 rounded-lg border">
+              <div className="flex items-center gap-3">
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <p className="text-sm font-medium">Make this a campaign</p>
+                  <p className="text-xs text-muted-foreground">Set a start date, end date, and goal</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsCampaign(!isCampaign)}
+                className={`w-10 h-6 rounded-full transition-colors ${isCampaign ? 'bg-primary' : 'bg-muted'}`}
+              >
+                <div className={`w-4 h-4 rounded-full bg-white transition-transform mx-1 ${isCampaign ? 'translate-x-4' : ''}`} />
+              </button>
+            </div>
+          </div>
+
+          {isCampaign && (
+            <div className="space-y-3 p-4 rounded-lg border bg-muted/30">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Start Date</Label>
+                  <Input type="date" value={campaignStart} onChange={e => setCampaignStart(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">End Date</Label>
+                  <Input type="date" value={campaignEnd} onChange={e => setCampaignEnd(e.target.value)} />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Campaign Goal</Label>
+                <select
+                  value={campaignGoal}
+                  onChange={e => setCampaignGoal(e.target.value)}
+                  className="w-full h-10 px-3 rounded-lg border bg-background text-sm"
+                >
+                  <option value="">Select a goal...</option>
+                  <option value="engagement">Increase Engagement</option>
+                  <option value="followers">Grow Followers</option>
+                  <option value="awareness">Brand Awareness</option>
+                  <option value="traffic">Drive Traffic</option>
+                  <option value="sales">Drive Sales</option>
+                  <option value="launch">Product Launch</option>
+                  <option value="event">Event Promotion</option>
+                </select>
+              </div>
+              {campaignGoal && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Target (optional)</Label>
+                  <Input
+                    type="number"
+                    placeholder={campaignGoal === 'followers' ? 'e.g., 500 new followers' : campaignGoal === 'traffic' ? 'e.g., 1000 clicks' : 'e.g., 100'}
+                    value={campaignGoalTarget}
+                    onChange={e => setCampaignGoalTarget(e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setStep(3)} className="flex-1">Back</Button>
             <Button onClick={() => setStep(5)} className="flex-1">Next</Button>
@@ -499,6 +574,25 @@ export default function CreateAutomationPage() {
                 <span className="text-muted-foreground">Publishing</span>
                 <span>{autoPublish ? 'Auto-publish' : 'Draft for review'}</span>
               </div>
+              {isCampaign && (
+                <>
+                  <div className="pt-2 border-t">
+                    <Badge variant="outline" className="mb-2">Campaign</Badge>
+                  </div>
+                  {campaignStart && campaignEnd && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Duration</span>
+                      <span>{new Date(campaignStart).toLocaleDateString()} — {new Date(campaignEnd).toLocaleDateString()}</span>
+                    </div>
+                  )}
+                  {campaignGoal && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Goal</span>
+                      <span className="capitalize">{campaignGoal.replace(/_/g, ' ')}{campaignGoalTarget ? ` (${campaignGoalTarget})` : ''}</span>
+                    </div>
+                  )}
+                </>
+              )}
             </CardContent>
           </Card>
 

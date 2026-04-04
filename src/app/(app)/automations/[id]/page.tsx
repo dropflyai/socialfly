@@ -95,6 +95,11 @@ export default function AutomationDetailPage({ params }: { params: Promise<{ id:
   const [contentExamples, setContentExamples] = useState('')
   const [runCount, setRunCount] = useState(0)
   const [lastRun, setLastRun] = useState<string | null>(null)
+  const [isCampaign, setIsCampaign] = useState(false)
+  const [campaignStart, setCampaignStart] = useState<string | null>(null)
+  const [campaignEnd, setCampaignEnd] = useState<string | null>(null)
+  const [campaignGoal, setCampaignGoal] = useState<string | null>(null)
+  const [campaignGoalTarget, setCampaignGoalTarget] = useState<number | null>(null)
 
   // Posts data
   const [upcoming, setUpcoming] = useState<PostItem[]>([])
@@ -138,6 +143,11 @@ export default function AutomationDetailPage({ params }: { params: Promise<{ id:
         setSelectedSchedule(rule.schedule || 'daily')
         setRunCount(rule.run_count || 0)
         setLastRun(rule.last_run)
+        setIsCampaign(rule.is_campaign || false)
+        setCampaignStart(rule.campaign_start || null)
+        setCampaignEnd(rule.campaign_end || null)
+        setCampaignGoal(rule.campaign_goal || null)
+        setCampaignGoalTarget(rule.campaign_goal_target || null)
 
         const cfg = rule.config || {}
         setTopics(Array.isArray(cfg.topics) ? cfg.topics.join(', ') : '')
@@ -320,6 +330,7 @@ export default function AutomationDetailPage({ params }: { params: Promise<{ id:
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-bold tracking-tight">{name}</h1>
+              {isCampaign && <Badge variant="outline" className="bg-purple-500/10 text-purple-500 border-purple-500/30">Campaign</Badge>}
               <Badge variant={ruleStatus === 'active' ? 'default' : 'secondary'}>
                 {ruleStatus === 'active' ? 'Active' : 'Paused'}
               </Badge>
@@ -379,6 +390,45 @@ export default function AutomationDetailPage({ params }: { params: Promise<{ id:
             <X className="h-4 w-4" />
           </button>
         </div>
+      )}
+
+      {/* Campaign progress */}
+      {isCampaign && campaignStart && campaignEnd && (
+        <Card className="border-purple-500/20 bg-purple-500/5">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-purple-500" />
+                <span className="text-sm font-medium">Campaign Progress</span>
+              </div>
+              {campaignGoal && (
+                <Badge variant="outline" className="capitalize text-xs">{campaignGoal.replace(/_/g, ' ')}{campaignGoalTarget ? `: ${campaignGoalTarget}` : ''}</Badge>
+              )}
+            </div>
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>{new Date(campaignStart).toLocaleDateString()}</span>
+              <span>{new Date(campaignEnd).toLocaleDateString()}</span>
+            </div>
+            {(() => {
+              const start = new Date(campaignStart).getTime()
+              const end = new Date(campaignEnd).getTime()
+              const now = Date.now()
+              const progress = Math.min(100, Math.max(0, Math.round(((now - start) / (end - start)) * 100)))
+              const daysLeft = Math.max(0, Math.ceil((end - now) / (1000 * 60 * 60 * 24)))
+              return (
+                <>
+                  <div className="h-2 rounded-full bg-muted overflow-hidden">
+                    <div className="h-full rounded-full bg-purple-500 transition-all" style={{ width: `${progress}%` }} />
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">{progress}% complete</span>
+                    <span className="text-muted-foreground">{daysLeft} day{daysLeft !== 1 ? 's' : ''} left</span>
+                  </div>
+                </>
+              )
+            })()}
+          </CardContent>
+        </Card>
       )}
 
       {/* Stats bar */}

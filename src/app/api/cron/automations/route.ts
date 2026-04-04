@@ -70,6 +70,21 @@ export async function POST(request: NextRequest) {
   const results = []
 
   for (const rule of rules as AutomationRule[]) {
+    // Campaign date boundaries
+    const ruleData = rule as unknown as { is_campaign?: boolean; campaign_start?: string; campaign_end?: string }
+    if (ruleData.is_campaign) {
+      const now = new Date()
+      if (ruleData.campaign_start && now < new Date(ruleData.campaign_start)) {
+        continue // Not started yet
+      }
+      if (ruleData.campaign_end && now > new Date(ruleData.campaign_end)) {
+        // Campaign ended — auto-pause
+        await supabase.from('automation_rules').update({ is_active: false, updated_at: now.toISOString() }).eq('id', rule.id)
+        results.push({ ruleId: rule.id, name: rule.name, success: false, error: 'Campaign ended — auto-paused' })
+        continue
+      }
+    }
+
     // Check if it's too soon to run again based on schedule
     if (rule.last_triggered_at && !isDue(rule)) {
       continue
