@@ -3,7 +3,7 @@
 import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  ArrowLeft, Save, Loader2, ImageIcon, Eye, Send, Trash2,
+  ArrowLeft, Save, Loader2, ImageIcon, Eye, Send, Trash2, Sparkles, Check, X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -49,6 +49,14 @@ export default function EditAutomationPage({ params }: { params: Promise<{ id: s
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const [previewing, setPreviewing] = useState(false)
+  const [preview, setPreview] = useState<{
+    text: string
+    imagePrompt?: string
+    variants?: Record<string, { text: string; hashtags?: string[] }>
+    topic?: string
+  } | null>(null)
 
   const [name, setName] = useState('')
   const [type, setType] = useState('')
@@ -324,6 +332,96 @@ export default function EditAutomationPage({ params }: { params: Promise<{ id: s
           </button>
         </div>
       </div>
+
+      {/* Preview */}
+      <Card className="border-primary/20">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" />
+            Preview Content
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            See what this automation would generate before it runs. Does not deduct credits.
+          </p>
+          <Button
+            variant="outline"
+            onClick={async () => {
+              setPreviewing(true)
+              setPreview(null)
+              try {
+                const config: Record<string, unknown> = {
+                  topics: topics.split(',').map(t => t.trim()).filter(Boolean),
+                  tone,
+                  contentExamples: contentExamples || undefined,
+                  industry: industry || undefined,
+                }
+                if (type === 'product_ad') {
+                  config.product = productName
+                  config.productDescription = productDescription
+                  config.painPoints = painPoints.split(',').map(t => t.trim()).filter(Boolean)
+                }
+                const res = await fetch('/api/automations/preview', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ type, config, platforms: selectedPlatforms }),
+                })
+                if (res.ok) {
+                  const data = await res.json()
+                  setPreview(data.preview)
+                } else {
+                  const data = await res.json()
+                  setError(data.error || 'Preview failed')
+                }
+              } catch {
+                setError('Preview failed')
+              }
+              setPreviewing(false)
+            }}
+            disabled={previewing}
+            className="gap-2"
+          >
+            {previewing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            {previewing ? 'Generating preview...' : 'Generate Preview'}
+          </Button>
+
+          {preview && (
+            <div className="space-y-3 pt-2">
+              {preview.topic && (
+                <div className="text-xs text-muted-foreground">
+                  Topic selected: <span className="text-foreground font-medium">{preview.topic}</span>
+                </div>
+              )}
+              {preview.variants ? (
+                Object.entries(preview.variants).map(([platform, variant]) => (
+                  <div key={platform} className="p-3 rounded-lg border bg-muted/30 space-y-2">
+                    <div className="text-xs font-medium text-primary capitalize">{platform}</div>
+                    <p className="text-sm whitespace-pre-wrap">{variant.text}</p>
+                    {variant.hashtags?.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {variant.hashtags.map(tag => (
+                          <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div className="p-3 rounded-lg border bg-muted/30">
+                  <p className="text-sm whitespace-pre-wrap">{preview.text}</p>
+                </div>
+              )}
+              {preview.imagePrompt && (
+                <div className="p-3 rounded-lg border border-dashed bg-muted/20">
+                  <div className="text-xs font-medium text-muted-foreground mb-1">AI Image would be:</div>
+                  <p className="text-sm italic">{preview.imagePrompt}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Save */}
       <div className="flex gap-2">

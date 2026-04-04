@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import Anthropic from '@anthropic-ai/sdk'
-import { publishToMultiplePlatforms } from '@/lib/platforms'
+import { deductCredits, checkCredits } from '@/lib/credits'
 
 export const maxDuration = 300 // 5 minutes max
 
@@ -169,6 +169,16 @@ async function executeAutomation(
   const contentExamples = (config.contentExamples as string) || ''
   const userIndustry = (config.industry as string) || ''
 
+  // Check credits before generating (1 for text + 5 for image if enabled)
+  const totalCreditsNeeded = 1 + (includeImages ? 5 : 0)
+  const creditCheck = await checkCredits(rule.user_id, 'caption')
+  if (!creditCheck.allowed || creditCheck.creditsRemaining < totalCreditsNeeded) {
+    return { success: false, error: `Insufficient credits (need ${totalCreditsNeeded}, have ${creditCheck.creditsRemaining}). Automation paused.` }
+  }
+
+  // Deduct caption credit
+  await deductCredits(rule.user_id, 'caption', { automation_rule_id: rule.id })
+
   // Load brand context if available
   let brandContext = ''
   const { data: brand } = await supabase
@@ -327,6 +337,9 @@ Return valid JSON:
   // Generate AI image if enabled
   if (includeImages && generated.imagePrompt) {
     try {
+      // Deduct image generation credit
+      await deductCredits(rule.user_id, 'image_generate', { automation_rule_id: rule.id })
+
       const { fal } = await import('@fal-ai/client')
       fal.config({ credentials: process.env.FAL_KEY })
 

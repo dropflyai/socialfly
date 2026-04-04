@@ -29,6 +29,48 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ posts })
 }
 
+// PATCH /api/posts/schedule?id=xxx&action=approve — approve a draft post
+export async function PATCH(request: NextRequest) {
+  const supabase = await createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { searchParams } = new URL(request.url)
+  const postId = searchParams.get('id')
+  const action = searchParams.get('action')
+
+  if (!postId) {
+    return NextResponse.json({ error: 'Missing post ID' }, { status: 400 })
+  }
+
+  const serviceClient = createServiceClient()
+
+  if (action === 'approve') {
+    // Move draft to scheduled, publish in 5 minutes
+    const { error } = await serviceClient
+      .from('scheduled_posts')
+      .update({
+        status: 'scheduled',
+        scheduled_for: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', postId)
+      .eq('user_id', user.id)
+      .eq('status', 'draft')
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, status: 'scheduled' })
+  }
+
+  return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
+}
+
 // DELETE /api/posts/schedule?id=xxx — cancel a scheduled post
 export async function DELETE(request: NextRequest) {
   const supabase = await createServerSupabaseClient()
