@@ -98,6 +98,10 @@ export default function CreateAutomationPage() {
   const [painPoints, setPainPoints] = useState('')
   const [industry, setIndustry] = useState('')
   const [contentExamples, setContentExamples] = useState('')
+  const [mediaSource, setMediaSource] = useState<'ai' | 'library' | 'none'>('ai')
+  const [mediaPool, setMediaPool] = useState<{ id: string; url: string; name: string }[]>([])
+  const [availableMedia, setAvailableMedia] = useState<{ id: string; url: string; name: string }[]>([])
+  const [loadingMedia, setLoadingMedia] = useState(false)
 
   // Campaign fields
   const [isCampaign, setIsCampaign] = useState(false)
@@ -107,6 +111,27 @@ export default function CreateAutomationPage() {
   const [campaignGoalTarget, setCampaignGoalTarget] = useState('')
 
   const totalSteps = 5
+
+  async function loadMediaLibrary() {
+    if (availableMedia.length > 0) return
+    setLoadingMedia(true)
+    try {
+      const res = await fetch('/api/media?type=image')
+      if (res.ok) {
+        const data = await res.json()
+        setAvailableMedia((data.assets || []).map((a: { id: string; url: string; name: string }) => ({ id: a.id, url: a.url, name: a.name })))
+      }
+    } catch { /* ignore */ }
+    setLoadingMedia(false)
+  }
+
+  function toggleMediaInPool(asset: { id: string; url: string; name: string }) {
+    setMediaPool(prev =>
+      prev.find(m => m.id === asset.id)
+        ? prev.filter(m => m.id !== asset.id)
+        : [...prev, asset]
+    )
+  }
 
   function togglePlatform(id: string) {
     setSelectedPlatforms(prev =>
@@ -123,7 +148,9 @@ export default function CreateAutomationPage() {
       const config: Record<string, unknown> = {
         topics: topics.split(',').map(t => t.trim()).filter(Boolean),
         tone,
-        includeImages,
+        includeImages: mediaSource === 'ai',
+        mediaSource,
+        mediaPool: mediaSource === 'library' ? mediaPool.map(m => ({ id: m.id, url: m.url })) : undefined,
         autoPublish,
         contentExamples: contentExamples || undefined,
         industry: industry || undefined,
@@ -347,23 +374,71 @@ export default function CreateAutomationPage() {
             />
           </div>
 
-          {/* Toggles */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 rounded-lg border">
-              <div className="flex items-center gap-3">
-                <ImageIcon className="h-4 w-4 text-muted-foreground" />
-                <div>
-                  <p className="text-sm font-medium">Include AI images</p>
-                  <p className="text-xs text-muted-foreground">Generate an image for each post (5 credits each)</p>
-                </div>
-              </div>
+          {/* Media source */}
+          <div className="space-y-2">
+            <Label>Images for posts</Label>
+            <div className="grid gap-2">
               <button
-                onClick={() => setIncludeImages(!includeImages)}
-                className={`w-10 h-6 rounded-full transition-colors ${includeImages ? 'bg-primary' : 'bg-muted'}`}
+                onClick={() => setMediaSource('ai')}
+                className={`p-3 rounded-lg border text-left transition-all ${mediaSource === 'ai' ? 'ring-2 ring-primary bg-primary/5' : 'hover:border-primary/50'}`}
               >
-                <div className={`w-4 h-4 rounded-full bg-white transition-transform mx-1 ${includeImages ? 'translate-x-4' : ''}`} />
+                <p className="text-sm font-medium">AI-generated images</p>
+                <p className="text-xs text-muted-foreground">AI creates a unique image for each post (5 credits each)</p>
+              </button>
+              <button
+                onClick={() => { setMediaSource('library'); loadMediaLibrary() }}
+                className={`p-3 rounded-lg border text-left transition-all ${mediaSource === 'library' ? 'ring-2 ring-primary bg-primary/5' : 'hover:border-primary/50'}`}
+              >
+                <p className="text-sm font-medium">My media library</p>
+                <p className="text-xs text-muted-foreground">Pick images from your uploads to rotate through</p>
+              </button>
+              <button
+                onClick={() => setMediaSource('none')}
+                className={`p-3 rounded-lg border text-left transition-all ${mediaSource === 'none' ? 'ring-2 ring-primary bg-primary/5' : 'hover:border-primary/50'}`}
+              >
+                <p className="text-sm font-medium">Text only</p>
+                <p className="text-xs text-muted-foreground">No images — just text posts</p>
               </button>
             </div>
+          </div>
+
+          {/* Media pool picker */}
+          {mediaSource === 'library' && (
+            <div className="space-y-2">
+              <Label>Select images to rotate ({mediaPool.length} selected)</Label>
+              {loadingMedia ? (
+                <div className="py-4 text-center text-sm text-muted-foreground">Loading media...</div>
+              ) : availableMedia.length === 0 ? (
+                <div className="py-4 text-center text-sm text-muted-foreground">
+                  No images in your library. <a href="/media" className="text-primary underline">Upload some first</a>.
+                </div>
+              ) : (
+                <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto">
+                  {availableMedia.map(asset => {
+                    const selected = mediaPool.find(m => m.id === asset.id)
+                    return (
+                      <button
+                        key={asset.id}
+                        onClick={() => toggleMediaInPool(asset)}
+                        className={`relative rounded-lg overflow-hidden border-2 transition-all aspect-square ${selected ? 'border-primary ring-1 ring-primary' : 'border-transparent hover:border-primary/30'}`}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={asset.url} alt={asset.name} className="w-full h-full object-cover" />
+                        {selected && (
+                          <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
+                            <Check className="h-5 w-5 text-white drop-shadow" />
+                          </div>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Toggles */}
+          <div className="space-y-3">
 
             <div className="flex items-center justify-between p-3 rounded-lg border">
               <div className="flex items-center gap-3">

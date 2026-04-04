@@ -180,13 +180,14 @@ async function executeAutomation(
   // User-configured settings
   const topics = (config.topics as string[]) || []
   const userTone = (config.tone as string) || 'Professional'
-  const includeImages = config.includeImages !== false
+  const mediaSource = (config.mediaSource as string) || (config.includeImages !== false ? 'ai' : 'none')
+  const userMediaPool = (config.mediaPool as { id: string; url: string }[]) || []
   const autoPublish = config.autoPublish !== false
   const contentExamples = (config.contentExamples as string) || ''
   const userIndustry = (config.industry as string) || ''
 
-  // Check credits before generating (1 for text + 5 for image if enabled)
-  const totalCreditsNeeded = 1 + (includeImages ? 5 : 0)
+  // Check credits before generating (1 for text + 5 for AI image)
+  const totalCreditsNeeded = 1 + (mediaSource === 'ai' ? 5 : 0)
   const creditCheck = await checkCredits(rule.user_id, 'caption')
   if (!creditCheck.allowed || creditCheck.creditsRemaining < totalCreditsNeeded) {
     return { success: false, error: `Insufficient credits (need ${totalCreditsNeeded}, have ${creditCheck.creditsRemaining}). Automation paused.` }
@@ -384,10 +385,13 @@ Return valid JSON:
   const postText = generated.variants?.[platforms[0]]?.text || generated.text
   const mediaUrls: string[] = []
 
-  // Generate AI image if enabled
-  if (includeImages && generated.imagePrompt) {
+  if (mediaSource === 'library' && userMediaPool.length > 0) {
+    // Pick a random image from the user's media pool
+    const randomIndex = Math.floor(Math.random() * userMediaPool.length)
+    mediaUrls.push(userMediaPool[randomIndex].url)
+  } else if (mediaSource === 'ai' && generated.imagePrompt) {
+    // Generate AI image
     try {
-      // Deduct image generation credit
       await deductCredits(rule.user_id, 'image_generate', { automation_rule_id: rule.id })
 
       const { fal } = await import('@fal-ai/client')
@@ -407,9 +411,9 @@ Return valid JSON:
       }
     } catch (imgErr) {
       console.error('Automation image generation failed:', imgErr)
-      // Continue without image — not a hard failure
     }
   }
+  // mediaSource === 'none' — no image, text only
 
   // Save as scheduled post or draft
   // Drafts still need a scheduled_for date (DB constraint) — set far future so cron doesn't pick them up
