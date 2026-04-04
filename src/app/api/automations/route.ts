@@ -136,7 +136,21 @@ export async function PATCH(request: NextRequest) {
   if (body.status !== undefined) updateData.is_active = body.status === 'active'
   if (body.is_active !== undefined) updateData.is_active = body.is_active
   if (body.type !== undefined) updateData.trigger_type = body.type
-  if (body.config !== undefined) updateData.trigger_config = body.config
+  if (body.config !== undefined) {
+    updateData.trigger_config = {
+      ...body.config,
+      schedule: body.schedule || body.config.schedule,
+      originalType: body.config.originalType || body.type,
+    }
+  }
+  if (body.schedule !== undefined && !body.config) {
+    // Update schedule inside existing trigger_config
+    updateData.trigger_config = updateData.trigger_config || {}
+    updateData.trigger_config.schedule = body.schedule
+  }
+  if (body.platforms !== undefined) {
+    updateData.action_config = { platforms: body.platforms }
+  }
   if (body.actionType !== undefined) updateData.action_type = body.actionType
   if (body.actionConfig !== undefined) updateData.action_config = body.actionConfig
 

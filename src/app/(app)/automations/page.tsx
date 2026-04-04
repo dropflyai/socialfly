@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
-  Zap, Plus, Play, Pause, History, Trash2, Clock, Calendar,
+  Zap, Plus, Play, Pause, History, Trash2, Clock, Calendar, Edit,
   Instagram, Facebook, Twitter, RefreshCw, ToggleLeft, ToggleRight
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -39,6 +40,7 @@ const platformIcons: Record<string, typeof Instagram> = {
 }
 
 export default function AutomationsPage() {
+  const router = useRouter()
   const [rules, setRules] = useState<AutomationRule[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -107,6 +109,14 @@ export default function AutomationsPage() {
               </div>
             </div>
             <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => router.push(`/automations/${rule.id}`)}
+                title="Edit"
+              >
+                <Edit className="h-4 w-4" />
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"
