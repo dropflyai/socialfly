@@ -216,6 +216,44 @@ async function executeAutomation(
     brandContext = `Tone: ${userTone}.`
   }
 
+  // Load performance data to inform content
+  let analyticsContext = ''
+  const { data: recentPosts } = await supabase
+    .from('scheduled_posts')
+    .select('custom_content, metrics, platforms, posted_at')
+    .eq('user_id', rule.user_id)
+    .eq('status', 'posted')
+    .not('metrics', 'is', null)
+    .order('posted_at', { ascending: false })
+    .limit(10)
+
+  if (recentPosts?.length) {
+    // Find top and bottom performers
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const scored = recentPosts.map((p: any) => {
+      let engagement = 0
+      const metrics = p.metrics as Record<string, { likes?: number; comments?: number; shares?: number }> | null
+      if (metrics) {
+        for (const m of Object.values(metrics)) {
+          engagement += (m.likes || 0) + (m.comments || 0) + (m.shares || 0)
+        }
+      }
+      return { text: (p.custom_content as { text?: string })?.text?.slice(0, 80) || '', engagement, platforms: p.platforms }
+    }).sort((a, b) => b.engagement - a.engagement)
+
+    const topPost = scored[0]
+    const bottomPost = scored[scored.length - 1]
+    const avgEngagement = Math.round(scored.reduce((sum, p) => sum + p.engagement, 0) / scored.length)
+
+    if (topPost && topPost.engagement > 0) {
+      analyticsContext = `\n\nPERFORMANCE DATA from recent posts:
+- Average engagement: ${avgEngagement} per post
+- Top performing post (${topPost.engagement} engagements): "${topPost.text}..."
+${bottomPost && bottomPost.engagement !== topPost.engagement ? `- Lowest performing post (${bottomPost.engagement} engagements): "${bottomPost.text}..."` : ''}
+- Create content similar to top performers. Avoid patterns from low performers.\n`
+    }
+  }
+
   // Load rejection feedback to improve content
   let feedbackContext = ''
   const { data: feedback } = await supabase
@@ -351,7 +389,7 @@ Create a post that encourages engagement. Include hashtags.`
     messages: [{
       role: 'user',
       content: `${prompt}
-${feedbackContext}
+${analyticsContext}${feedbackContext}
 Generate platform-specific versions for: ${platforms.join(', ')}
 
 Platform specs:

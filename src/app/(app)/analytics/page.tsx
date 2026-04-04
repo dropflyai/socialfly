@@ -5,7 +5,7 @@ import Link from 'next/link'
 import {
   BarChart3, TrendingUp, Users, Eye, Heart, MessageCircle,
   RefreshCw, Calendar, ArrowUp, ArrowDown, Minus,
-  Instagram, Facebook, Twitter
+  Instagram, Facebook, Twitter, Sparkles, Loader2, Lightbulb, Target, Clock as ClockIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -53,6 +53,16 @@ export default function AnalyticsPage() {
   const [data, setData] = useState<AnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [days, setDays] = useState(30)
+  const [insights, setInsights] = useState<{
+    summary?: string
+    whatsWorking?: string
+    whatsNot?: string
+    tips?: string[]
+    bestPlatform?: string
+    bestTime?: string
+    contentSuggestion?: string
+  } | null>(null)
+  const [insightsLoading, setInsightsLoading] = useState(false)
 
   async function fetchAnalytics() {
     setLoading(true)
@@ -176,7 +186,7 @@ export default function AnalyticsPage() {
         </Card>
       )}
 
-      {hasData && (
+      {hasData && (<>
         <div className="grid gap-6 lg:grid-cols-2">
           {/* Platform Breakdown */}
           <Card>
@@ -316,7 +326,123 @@ export default function AnalyticsPage() {
             </CardContent>
           </Card>
         </div>
-      )}
+
+        {/* AI Insights */}
+        <Card className="border-primary/20 mt-6">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" />
+                <CardTitle className="text-base">AI Insights</CardTitle>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                disabled={insightsLoading}
+                onClick={async () => {
+                  setInsightsLoading(true)
+                  try {
+                    const res = await fetch(`/api/analytics/insights?days=${days}`)
+                    if (res.ok) {
+                      const json = await res.json()
+                      setInsights(json.insights)
+                    }
+                  } catch { /* ignore */ }
+                  setInsightsLoading(false)
+                }}
+              >
+                {insightsLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                {insights ? 'Refresh' : 'Generate Insights'}
+              </Button>
+            </div>
+            <CardDescription>AI analyzes your performance and tells you what to do next</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {insightsLoading ? (
+              <div className="flex items-center justify-center py-8 gap-3">
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                <span className="text-sm text-muted-foreground">Analyzing your performance...</span>
+              </div>
+            ) : insights ? (
+              <div className="space-y-4">
+                {/* Summary */}
+                <div className="p-3 rounded-lg bg-primary/5 border border-primary/10">
+                  <p className="text-sm">{insights.summary}</p>
+                </div>
+
+                {/* What's working / What's not */}
+                <div className="grid md:grid-cols-2 gap-3">
+                  {insights.whatsWorking && (
+                    <div className="p-3 rounded-lg bg-green-500/5 border border-green-500/10">
+                      <p className="text-xs font-medium text-green-500 mb-1 flex items-center gap-1">
+                        <ArrowUp className="h-3 w-3" /> What&apos;s Working
+                      </p>
+                      <p className="text-sm">{insights.whatsWorking}</p>
+                    </div>
+                  )}
+                  {insights.whatsNot && (
+                    <div className="p-3 rounded-lg bg-orange-500/5 border border-orange-500/10">
+                      <p className="text-xs font-medium text-orange-500 mb-1 flex items-center gap-1">
+                        <ArrowDown className="h-3 w-3" /> Needs Improvement
+                      </p>
+                      <p className="text-sm">{insights.whatsNot}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Quick stats */}
+                <div className="flex flex-wrap gap-3">
+                  {insights.bestPlatform && (
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted text-sm">
+                      <Target className="h-3 w-3 text-primary" />
+                      Best platform: <span className="font-medium capitalize">{insights.bestPlatform}</span>
+                    </div>
+                  )}
+                  {insights.bestTime && (
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted text-sm">
+                      <ClockIcon className="h-3 w-3 text-primary" />
+                      Best time: <span className="font-medium">{insights.bestTime}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Tips */}
+                {insights.tips && insights.tips.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                      <Lightbulb className="h-3 w-3" /> Recommendations
+                    </p>
+                    <div className="space-y-1.5">
+                      {insights.tips.map((tip, i) => (
+                        <div key={i} className="flex items-start gap-2 p-2 rounded bg-muted/50">
+                          <span className="text-xs text-primary font-bold mt-0.5">{i + 1}</span>
+                          <p className="text-sm">{tip}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Content suggestion */}
+                {insights.contentSuggestion && (
+                  <div className="p-3 rounded-lg border border-dashed bg-muted/30">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Content Idea</p>
+                    <p className="text-sm">{insights.contentSuggestion}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-6">
+                <Sparkles className="h-8 w-8 text-muted-foreground/30 mx-auto mb-3" />
+                <p className="text-sm text-muted-foreground">
+                  Click &quot;Generate Insights&quot; to get AI-powered analysis of your social media performance.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </>)}
     </div>
   )
 }
