@@ -21,8 +21,10 @@ export async function GET(request: NextRequest) {
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
 
-  if (status) {
-    query = query.eq('status', status)
+  if (status === 'active') {
+    query = query.eq('is_active', true)
+  } else if (status === 'paused') {
+    query = query.eq('is_active', false)
   }
 
   const { data: rules, error } = await query
@@ -53,7 +55,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { name, type, config, platforms, schedule } = body
+  const { name, type, config, actionType, actionConfig, description } = body
 
   if (!name || !type) {
     return NextResponse.json({ error: 'Missing name or type' }, { status: 400 })
@@ -65,13 +67,15 @@ export async function POST(request: NextRequest) {
     .insert({
       user_id: user.id,
       name,
-      type,
-      config: config || {},
-      platforms: platforms || ['instagram'],
-      schedule: schedule || 'daily',
-      status: 'active',
-      last_run: null,
-      run_count: 0,
+      description: description || null,
+      trigger_type: type,
+      trigger_config: config || {},
+      action_type: actionType || 'generate_and_post',
+      action_config: actionConfig || {},
+      is_active: true,
+      trigger_count: 0,
+      success_count: 0,
+      failure_count: 0,
     })
     .select()
     .single()
@@ -101,9 +105,21 @@ export async function PATCH(request: NextRequest) {
   const body = await request.json()
   const serviceClient = createServiceClient()
 
+  // Map frontend fields to DB columns
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updateData: Record<string, any> = { updated_at: new Date().toISOString() }
+  if (body.name !== undefined) updateData.name = body.name
+  if (body.description !== undefined) updateData.description = body.description
+  if (body.status !== undefined) updateData.is_active = body.status === 'active'
+  if (body.is_active !== undefined) updateData.is_active = body.is_active
+  if (body.type !== undefined) updateData.trigger_type = body.type
+  if (body.config !== undefined) updateData.trigger_config = body.config
+  if (body.actionType !== undefined) updateData.action_type = body.actionType
+  if (body.actionConfig !== undefined) updateData.action_config = body.actionConfig
+
   const { error } = await serviceClient
     .from('automation_rules')
-    .update({ ...body, updated_at: new Date().toISOString() })
+    .update(updateData)
     .eq('id', ruleId)
     .eq('user_id', user.id)
 
