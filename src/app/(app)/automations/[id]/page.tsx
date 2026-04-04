@@ -380,10 +380,11 @@ export default function AutomationDetailPage({ params }: { params: Promise<{ id:
       )}
 
       {/* Stats bar */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card><CardContent className="p-3 text-center">
-          <p className="text-2xl font-bold">{stats.totalPosted}</p>
-          <p className="text-xs text-muted-foreground">Posts Published</p>
+          <p className="text-2xl font-bold">{stats.totalPosted + upcoming.length}</p>
+          <p className="text-xs text-muted-foreground">Posts Created</p>
+          <p className="text-[10px] text-muted-foreground">{stats.totalPosted} published · {upcoming.length} queued</p>
         </CardContent></Card>
         <Card><CardContent className="p-3 text-center">
           <p className="text-2xl font-bold text-pink-500">{stats.totalLikes}</p>
@@ -394,12 +395,8 @@ export default function AutomationDetailPage({ params }: { params: Promise<{ id:
           <p className="text-xs text-muted-foreground">Total Comments</p>
         </CardContent></Card>
         <Card><CardContent className="p-3 text-center">
-          <p className="text-2xl font-bold">{runCount}</p>
-          <p className="text-xs text-muted-foreground">Total Runs</p>
-        </CardContent></Card>
-        <Card><CardContent className="p-3 text-center">
-          <p className="text-2xl font-bold text-primary">{stats.pendingCount + stats.scheduledCount}</p>
-          <p className="text-xs text-muted-foreground">Queued</p>
+          <p className="text-2xl font-bold text-primary">{stats.pendingCount}</p>
+          <p className="text-xs text-muted-foreground">Pending Review</p>
         </CardContent></Card>
       </div>
 
