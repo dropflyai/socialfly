@@ -368,10 +368,11 @@ Return valid JSON:
   }
 
   // Save as scheduled post or draft
+  // Drafts still need a scheduled_for date (DB constraint) — set far future so cron doesn't pick them up
   const status = autoPublish ? 'scheduled' : 'draft'
   const scheduledFor = autoPublish
-    ? new Date(Date.now() + 5 * 60 * 1000).toISOString() // 5 min from now
-    : null
+    ? new Date(Date.now() + 5 * 60 * 1000).toISOString()
+    : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString() // Far future placeholder
 
   const { data: post, error: postError } = await supabase
     .from('scheduled_posts')
