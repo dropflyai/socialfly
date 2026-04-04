@@ -399,14 +399,33 @@ export async function smartGenerateImage(
 }
 
 /**
- * Edit an existing image (Nano Banana only — FAL can't edit).
+ * Edit an existing image using Fal AI image-to-image.
  */
 export async function smartEditImage(
   imageUrl: string,
   editPrompt: string
 ): Promise<GeneratedImage & { provider: string }> {
-  const result = await editWithNanoBanana(imageUrl, editPrompt)
-  return { ...result, provider: 'gemini' }
+  const config = getConfig()
+  fal.config({ credentials: config.falApiKey || process.env.FAL_KEY })
+
+  const result = await fal.subscribe('fal-ai/flux/dev/image-to-image', {
+    input: {
+      image_url: imageUrl,
+      prompt: `Edited version of this image: ${editPrompt}. Apply the changes while keeping the overall composition.`,
+      strength: 0.85,
+      num_images: 1,
+    },
+  })
+
+  const images = (result.data as { images?: { url: string }[] }).images
+  if (!images?.length) throw new Error('No edited image generated')
+
+  return {
+    url: images[0].url,
+    prompt: editPrompt,
+    enhancedPrompt: editPrompt,
+    provider: 'fal',
+  }
 }
 
 /**
