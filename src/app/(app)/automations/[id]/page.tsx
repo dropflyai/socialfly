@@ -206,33 +206,49 @@ export default function AutomationDetailPage({ params }: { params: Promise<{ id:
     setRuleStatus(newStatus)
   }
 
+  const [runResult, setRunResult] = useState<string | null>(null)
+
   async function handleRunNow() {
     setTriggering(true)
+    setRunResult(null)
     try {
-      // Set next_trigger_at to now so the cron picks it up
+      // Reset the trigger so cron picks it up
       await fetch(`/api/automations?id=${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_active: true }),
+        body: JSON.stringify({ runNow: true }),
       })
-      // Trigger the cron manually
+
+      // Trigger the cron
       const res = await fetch('/api/cron/automations', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${window.location.hostname === 'localhost' ? 'socialfly-cron-secret-2026' : 'socialfly_cron_secret_2026'}` },
+        headers: { Authorization: 'Bearer socialfly_cron_secret_2026' },
       })
+
       if (res.ok) {
-        // Refresh data
+        const data = await res.json()
+        if (data.processed > 0) {
+          setRunResult(`Generated ${data.processed} post${data.processed > 1 ? 's' : ''}`)
+        } else {
+          setRunResult('No post generated — check credits or config')
+        }
+
+        // Refresh posts data
         const postsRes = await fetch(`/api/automations/posts?ruleId=${id}`)
         if (postsRes.ok) {
-          const data = await postsRes.json()
-          setUpcoming(data.upcoming || [])
-          setHistory(data.history || [])
-          setStats(data.stats || stats)
+          const postsData = await postsRes.json()
+          setUpcoming(postsData.upcoming || [])
+          setHistory(postsData.history || [])
+          setStats(postsData.stats || stats)
         }
         setRunCount(prev => prev + 1)
         setLastRun(new Date().toISOString())
+      } else {
+        setRunResult('Failed to trigger automation')
       }
-    } catch { /* ignore */ }
+    } catch {
+      setRunResult('Something went wrong')
+    }
     setTriggering(false)
   }
 
@@ -319,6 +335,15 @@ export default function AutomationDetailPage({ params }: { params: Promise<{ id:
 
       {error && (
         <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">{error}</div>
+      )}
+
+      {runResult && (
+        <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 text-primary text-sm flex items-center justify-between">
+          <span>{runResult}</span>
+          <button onClick={() => setRunResult(null)} className="text-muted-foreground hover:text-foreground">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       )}
 
       {/* Stats bar */}

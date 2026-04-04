@@ -154,6 +154,10 @@ export async function PATCH(request: NextRequest) {
   if (body.actionType !== undefined) updateData.action_type = body.actionType
   if (body.actionConfig !== undefined) updateData.action_config = body.actionConfig
   if (body.brandId !== undefined) updateData.brand_id = body.brandId || null
+  if (body.runNow === true) {
+    updateData.next_trigger_at = new Date().toISOString()
+    updateData.last_triggered_at = null // Reset so isDue returns true
+  }
 
   const { error } = await serviceClient
     .from('automation_rules')
