@@ -58,6 +58,9 @@ export default function EditAutomationPage({ params }: { params: Promise<{ id: s
     topic?: string
   } | null>(null)
 
+  const [brands, setBrands] = useState<{ id: string; name: string }[]>([])
+  const [selectedBrandId, setSelectedBrandId] = useState<string>('')
+
   const [name, setName] = useState('')
   const [type, setType] = useState('')
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([])
@@ -73,16 +76,29 @@ export default function EditAutomationPage({ params }: { params: Promise<{ id: s
   const [contentExamples, setContentExamples] = useState('')
 
   useEffect(() => {
-    async function fetchAutomation() {
+    async function fetchData() {
       try {
-        const res = await fetch('/api/automations')
-        if (!res.ok) throw new Error('Failed to fetch')
-        const data = await res.json()
-        const rule = (data.rules || []).find((r: AutomationData) => r.id === id)
+        const [rulesRes, brandsRes] = await Promise.all([
+          fetch('/api/automations'),
+          fetch('/api/brand/analyze'),
+        ])
+
+        if (brandsRes.ok) {
+          const brandsData = await brandsRes.json()
+          if (brandsData?.brandProfiles?.length) {
+            setBrands(brandsData.brandProfiles.map((b: { id: string; name: string }) => ({ id: b.id, name: b.name })))
+          }
+        }
+
+        if (!rulesRes.ok) throw new Error('Failed to fetch')
+        const data = await rulesRes.json()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const rule = (data.rules || []).find((r: any) => r.id === id)
         if (!rule) { router.push('/automations'); return }
 
         setName(rule.name)
         setType(rule.type)
+        setSelectedBrandId(rule.brand_id || '')
         setSelectedPlatforms(rule.platforms || [])
         setSelectedSchedule(rule.schedule || 'daily')
 
@@ -101,7 +117,7 @@ export default function EditAutomationPage({ params }: { params: Promise<{ id: s
       }
       setLoading(false)
     }
-    fetchAutomation()
+    fetchData()
   }, [id, router])
 
   function togglePlatform(pid: string) {
@@ -138,6 +154,7 @@ export default function EditAutomationPage({ params }: { params: Promise<{ id: s
           config,
           platforms: selectedPlatforms,
           schedule: selectedSchedule,
+          brandId: selectedBrandId || undefined,
         }),
       })
 
@@ -195,6 +212,27 @@ export default function EditAutomationPage({ params }: { params: Promise<{ id: s
         <Label>Name</Label>
         <Input value={name} onChange={e => setName(e.target.value)} />
       </div>
+
+      {/* Brand */}
+      {brands.length > 0 && (
+        <div className="space-y-2">
+          <Label>Brand Profile</Label>
+          <div className="grid gap-2">
+            {brands.map(brand => (
+              <button
+                key={brand.id}
+                onClick={() => setSelectedBrandId(brand.id)}
+                className={`p-3 rounded-lg border text-sm font-medium text-left transition-all ${
+                  selectedBrandId === brand.id ? 'ring-2 ring-primary bg-primary/5' : 'hover:border-primary/50'
+                }`}
+              >
+                {brand.name}
+                {selectedBrandId === brand.id && <Check className="h-4 w-4 text-primary inline ml-2" />}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Topics */}
       {(type === 'content_calendar' || type === 'ai_news') && (
@@ -365,7 +403,7 @@ export default function EditAutomationPage({ params }: { params: Promise<{ id: s
                 const res = await fetch('/api/automations/preview', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ type, config, platforms: selectedPlatforms }),
+                  body: JSON.stringify({ type, config, platforms: selectedPlatforms, brandId: selectedBrandId || undefined }),
                 })
                 if (res.ok) {
                   const data = await res.json()

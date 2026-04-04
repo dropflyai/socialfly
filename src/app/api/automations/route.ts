@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
   const mapped = (rules || []).map((r: any) => ({
     id: r.id,
     name: r.name,
+    brand_id: r.brand_id,
     type: r.trigger_config?.originalType || r.trigger_type,
     config: r.trigger_config || {},
     platforms: r.action_config?.platforms || [],
@@ -152,6 +153,7 @@ export async function PATCH(request: NextRequest) {
   }
   if (body.actionType !== undefined) updateData.action_type = body.actionType
   if (body.actionConfig !== undefined) updateData.action_config = body.actionConfig
+  if (body.brandId !== undefined) updateData.brand_id = body.brandId || null
 
   const { error } = await serviceClient
     .from('automation_rules')
