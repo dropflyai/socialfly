@@ -159,6 +159,15 @@ async function executeAutomation(
 ): Promise<{ success: boolean; postId?: string; error?: string }> {
   const type = rule.trigger_config.originalType || rule.trigger_type
   const platforms = (rule.action_config.platforms || ['instagram']) as string[]
+  const config = rule.trigger_config
+
+  // User-configured settings
+  const topics = (config.topics as string[]) || []
+  const userTone = (config.tone as string) || 'Professional'
+  const includeImages = config.includeImages !== false
+  const autoPublish = config.autoPublish !== false
+  const contentExamples = (config.contentExamples as string) || ''
+  const userIndustry = (config.industry as string) || ''
 
   // Load brand context if available
   let brandContext = ''
@@ -170,48 +179,74 @@ async function executeAutomation(
     .single()
 
   if (brand) {
-    brandContext = `Brand: ${brand.name}. Tone: ${brand.voice_tone}. Audience: ${brand.target_audience || 'general'}. Pillars: ${(brand.content_pillars || []).join(', ')}.`
+    brandContext = `Brand: ${brand.name}. Tone: ${brand.voice_tone || userTone}. Audience: ${brand.target_audience || 'general'}. Content pillars: ${(brand.content_pillars || []).join(', ')}.`
+  } else {
+    brandContext = `Tone: ${userTone}.`
   }
 
-  // Generate content based on automation type
+  // Pick a random topic for this run if multiple provided
+  const todaysTopic = topics.length > 0
+    ? topics[Math.floor(Math.random() * topics.length)]
+    : ''
+
+  // Build the prompt based on automation type
   let prompt: string
 
   switch (type) {
     case 'content_calendar':
-      prompt = `You are a social media manager. Generate a social media post for today.
+      prompt = `You are a social media manager creating today's post.
 ${brandContext}
-Create an engaging post that fits the brand. Include relevant hashtags.
-The post should be original, timely, and encourage engagement.`
+${todaysTopic ? `Today's topic/theme: ${todaysTopic}` : 'Choose an engaging topic that fits the brand.'}
+${contentExamples ? `\nHere are example posts the user likes (match this style):\n${contentExamples}` : ''}
+
+Create an engaging, original post. Be specific — don't be generic.
+The tone should be ${userTone.toLowerCase()}.
+Include relevant hashtags.`
       break
 
     case 'ai_news':
-      prompt = `You are a social media manager who posts about AI and technology news.
+      prompt = `You are a social media manager who posts about industry news and trends.
 ${brandContext}
-Generate a post about a recent AI trend, breakthrough, or news story.
+Industry focus: ${userIndustry || todaysTopic || 'technology and AI'}
+${contentExamples ? `\nStyle reference:\n${contentExamples}` : ''}
+
+Generate a post about a current trend, insight, or development in this space.
+Don't make up fake news — share a real insight or perspective.
+The tone should be ${userTone.toLowerCase()}.
 Make it informative but accessible. Include your take on why it matters.
 Include relevant hashtags.`
       break
 
-    case 'product_ad':
+    case 'product_ad': {
+      const product = (config.product as string) || ''
+      const productDesc = (config.productDescription as string) || ''
+      const pains = (config.painPoints as string[]) || ['saving time', 'reducing costs']
+      const todaysPain = pains[Math.floor(Math.random() * pains.length)]
+
       prompt = `You are a social media marketer creating a promotional post.
 ${brandContext}
-Product: ${rule.trigger_config.product || 'our main product'}
-Pain points to address: ${(rule.trigger_config.painPoints || ['saving time', 'reducing costs']).join(', ')}
-Create a pain-point driven promotional post. Don't be salesy — be helpful.
+Product: ${product || 'our product'}
+What it does: ${productDesc || 'helps businesses grow'}
+Today's pain point to address: ${todaysPain}
+${contentExamples ? `\nStyle reference:\n${contentExamples}` : ''}
+
+Create a pain-point driven post that resonates with the audience.
+Don't be salesy — be helpful and relatable. Lead with the problem, then hint at the solution.
+The tone should be ${userTone.toLowerCase()}.
 Include a subtle call-to-action and relevant hashtags.`
       break
+    }
 
-    case 'repurpose':
-      // Find the top performing post and adapt it
-      const { data: topPost } = await supabase
+    case 'repurpose': {
+      const { data: topPosts } = await supabase
         .from('scheduled_posts')
-        .select('custom_content, platforms, metrics')
+        .select('custom_content, platforms')
         .eq('user_id', rule.user_id)
         .eq('status', 'posted')
         .order('posted_at', { ascending: false })
         .limit(10)
 
-      const bestPost = topPost?.[0]
+      const bestPost = topPosts?.[Math.floor(Math.random() * Math.min(topPosts?.length || 1, 5))]
       if (!bestPost?.custom_content) {
         return { success: false, error: 'No previous posts to repurpose' }
       }
@@ -222,21 +257,25 @@ Original post: "${(bestPost.custom_content as { text?: string }).text || ''}"
 Original platforms: ${(bestPost.platforms || []).join(', ')}
 Target platforms: ${platforms.join(', ')}
 
-Rewrite this post for the target platforms. Make it fresh — don't copy word for word.
-Adapt the tone and format for each platform. Include relevant hashtags.`
+Rewrite this for the target platforms. Make it fresh — change the angle, not just the words.
+The tone should be ${userTone.toLowerCase()}.
+Include relevant hashtags.`
       break
+    }
 
     default:
       prompt = `You are a social media manager. Generate an engaging social media post.
 ${brandContext}
-Create a post that fits the brand and encourages engagement. Include hashtags.`
+${todaysTopic ? `Topic: ${todaysTopic}` : ''}
+The tone should be ${userTone.toLowerCase()}.
+Create a post that encourages engagement. Include hashtags.`
   }
 
   // Generate content with Claude
   const platformSpecs: Record<string, string> = {
     instagram: 'Instagram: storytelling, emoji-friendly, 5-15 hashtags at end',
     facebook: 'Facebook: community-focused, shareable, 2-3 hashtags',
-    linkedin: 'LinkedIn: professional, thought leadership, 3-5 hashtags',
+    linkedin: 'LinkedIn: professional, thought leadership, 3-5 hashtags. Hook in first line.',
     tiktok: 'TikTok: max 150 chars, trendy, 3-5 hashtags',
     twitter: 'Twitter/X: max 280 chars, punchy, 1-3 hashtags',
   }
@@ -260,6 +299,7 @@ ${platformInstructions}
 Return valid JSON:
 {
   "text": "the main post text (use the first platform's version)",
+  "imagePrompt": "a short description of an image that would complement this post (for AI image generation)",
   "variants": {
     "${platforms[0]}": { "text": "platform text", "hashtags": ["#tag1"] }
   }
@@ -272,31 +312,62 @@ Return valid JSON:
     return { success: false, error: 'No response from Claude' }
   }
 
-  let generated: { text: string; variants?: Record<string, { text: string; hashtags?: string[] }> }
+  let generated: { text: string; imagePrompt?: string; variants?: Record<string, { text: string; hashtags?: string[] }> }
   try {
     const jsonMatch = textBlock.text.match(/\{[\s\S]*\}/)
     if (!jsonMatch) throw new Error('No JSON in response')
     generated = JSON.parse(jsonMatch[0])
   } catch {
-    // Use raw text as fallback
     generated = { text: textBlock.text.slice(0, 2000) }
   }
 
   const postText = generated.variants?.[platforms[0]]?.text || generated.text
+  const mediaUrls: string[] = []
 
-  // Save as a scheduled post (publish immediately or schedule for optimal time)
+  // Generate AI image if enabled
+  if (includeImages && generated.imagePrompt) {
+    try {
+      const { fal } = await import('@fal-ai/client')
+      fal.config({ credentials: process.env.FAL_KEY })
+
+      const imgResult = await fal.subscribe('fal-ai/flux/schnell', {
+        input: {
+          prompt: generated.imagePrompt,
+          image_size: { width: 1080, height: 1080 },
+          num_images: 1,
+        },
+      })
+
+      const images = (imgResult.data as { images?: { url: string }[] }).images
+      if (images?.[0]?.url) {
+        mediaUrls.push(images[0].url)
+      }
+    } catch (imgErr) {
+      console.error('Automation image generation failed:', imgErr)
+      // Continue without image — not a hard failure
+    }
+  }
+
+  // Save as scheduled post or draft
+  const status = autoPublish ? 'scheduled' : 'draft'
+  const scheduledFor = autoPublish
+    ? new Date(Date.now() + 5 * 60 * 1000).toISOString() // 5 min from now
+    : null
+
   const { data: post, error: postError } = await supabase
     .from('scheduled_posts')
     .insert({
       user_id: rule.user_id,
       platforms,
-      status: 'scheduled',
-      scheduled_for: new Date(Date.now() + 5 * 60 * 1000).toISOString(), // 5 min from now
+      status,
+      scheduled_for: scheduledFor,
       custom_content: {
         text: postText,
-        media_urls: [],
+        media_urls: mediaUrls,
+        media_type: mediaUrls.length > 0 ? 'image' : undefined,
         automation_rule_id: rule.id,
         automation_type: type,
+        variants: generated.variants,
       },
     })
     .select()
