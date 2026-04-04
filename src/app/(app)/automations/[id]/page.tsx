@@ -208,19 +208,21 @@ export default function AutomationDetailPage({ params }: { params: Promise<{ id:
   }
 
   const [runResult, setRunResult] = useState<string | null>(null)
+  const [runStep, setRunStep] = useState<string | null>(null)
 
   async function handleRunNow() {
     setTriggering(true)
     setRunResult(null)
+
     try {
-      // Reset the trigger so cron picks it up
+      setRunStep('Preparing automation...')
       await fetch(`/api/automations?id=${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ runNow: true }),
       })
 
-      // Trigger the cron
+      setRunStep('Generating content with AI...')
       const res = await fetch('/api/cron/automations', {
         method: 'POST',
         headers: { Authorization: 'Bearer socialfly_cron_secret_2026' },
@@ -228,28 +230,32 @@ export default function AutomationDetailPage({ params }: { params: Promise<{ id:
 
       if (res.ok) {
         const data = await res.json()
-        if (data.processed > 0) {
-          setRunResult(`Generated ${data.processed} post${data.processed > 1 ? 's' : ''}`)
-        } else {
-          setRunResult('No post generated — check credits or config')
-        }
+        const result = data.results?.[0]
 
-        // Refresh posts data
-        const postsRes = await fetch(`/api/automations/posts?ruleId=${id}`)
-        if (postsRes.ok) {
-          const postsData = await postsRes.json()
-          setUpcoming(postsData.upcoming || [])
-          setHistory(postsData.history || [])
-          setStats(postsData.stats || stats)
+        if (result?.success) {
+          setRunStep('Loading new post...')
+          const postsRes = await fetch(`/api/automations/posts?ruleId=${id}`)
+          if (postsRes.ok) {
+            const postsData = await postsRes.json()
+            setUpcoming(postsData.upcoming || [])
+            setHistory(postsData.history || [])
+            setStats(postsData.stats || stats)
+          }
+          setRunCount(prev => prev + 1)
+          setLastRun(new Date().toISOString())
+          setRunResult(autoPublish
+            ? 'Post generated and scheduled! It will publish in ~5 minutes.'
+            : 'Post generated! Review it below in Pending Review.')
+        } else {
+          setRunResult(`Failed: ${result?.error || 'Unknown error'}`)
         }
-        setRunCount(prev => prev + 1)
-        setLastRun(new Date().toISOString())
       } else {
         setRunResult('Failed to trigger automation')
       }
     } catch {
       setRunResult('Something went wrong')
     }
+    setRunStep(null)
     setTriggering(false)
   }
 
@@ -341,10 +347,33 @@ export default function AutomationDetailPage({ params }: { params: Promise<{ id:
         <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">{error}</div>
       )}
 
-      {runResult && (
-        <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 text-primary text-sm flex items-center justify-between">
-          <span>{runResult}</span>
-          <button onClick={() => setRunResult(null)} className="text-muted-foreground hover:text-foreground">
+      {/* Run progress / result */}
+      {runStep && (
+        <div className="p-4 rounded-lg bg-primary/5 border border-primary/20 text-sm">
+          <div className="flex items-center gap-3">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            <div>
+              <p className="font-medium text-primary">{runStep}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">This may take 15-30 seconds</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {runResult && !runStep && (
+        <div className={`p-3 rounded-lg text-sm flex items-center justify-between ${
+          runResult.startsWith('Failed') || runResult.startsWith('Something')
+            ? 'bg-red-500/10 border border-red-500/20 text-red-400'
+            : 'bg-green-500/10 border border-green-500/20 text-green-400'
+        }`}>
+          <div className="flex items-center gap-2">
+            {runResult.startsWith('Failed') || runResult.startsWith('Something')
+              ? <X className="h-4 w-4" />
+              : <Check className="h-4 w-4" />
+            }
+            <span>{runResult}</span>
+          </div>
+          <button onClick={() => setRunResult(null)} className="text-muted-foreground hover:text-foreground ml-2">
             <X className="h-4 w-4" />
           </button>
         </div>
