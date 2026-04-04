@@ -36,7 +36,6 @@ const mainNavItems: NavItem[] = [
   { title: 'Content', href: '/content', icon: Sparkles },
   { title: 'Media', href: '/media', icon: FolderOpen },
   { title: 'Schedule', href: '/schedule', icon: Calendar },
-  { title: 'Templates', href: '/templates', icon: LayoutTemplate },
   { title: 'Automations', href: '/automations', icon: Zap, minTier: 'pro' },
   { title: 'Analytics', href: '/analytics', icon: BarChart3 },
 ]
