@@ -61,6 +61,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Missing name or type' }, { status: 400 })
   }
 
+  // Map frontend automation types to valid DB trigger/action types
+  // DB trigger_type: schedule, content_ready, trend_match, engagement_drop, new_follower_milestone, webhook
+  // DB action_type: generate_content, post_content, repurpose, schedule_post, send_notification, webhook
+  const triggerType = type === 'repurpose' ? 'content_ready' : 'schedule'
+  const actionTypeResolved = type === 'repurpose' ? 'repurpose'
+    : actionType || 'generate_content'
+
   const serviceClient = createServiceClient()
   const { data: rule, error } = await serviceClient
     .from('automation_rules')
@@ -68,9 +75,9 @@ export async function POST(request: NextRequest) {
       user_id: user.id,
       name,
       description: description || null,
-      trigger_type: type,
-      trigger_config: { ...(config || {}), schedule: schedule || 'daily' },
-      action_type: actionType || 'generate_and_post',
+      trigger_type: triggerType,
+      trigger_config: { ...(config || {}), schedule: schedule || 'daily', originalType: type },
+      action_type: actionTypeResolved,
       action_config: { ...(actionConfig || {}), platforms: platforms || ['instagram'] },
       is_active: true,
       trigger_count: 0,

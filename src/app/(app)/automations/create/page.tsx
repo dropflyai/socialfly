@@ -50,7 +50,8 @@ const automationTypes = [
 const platformOptions = [
   { id: 'instagram', name: 'Instagram', icon: Instagram },
   { id: 'facebook', name: 'Facebook', icon: Facebook },
-  { id: 'twitter', name: 'Twitter/X', icon: Twitter },
+  { id: 'linkedin', name: 'LinkedIn', icon: Facebook },
+  { id: 'tiktok', name: 'TikTok', icon: Instagram },
 ]
 
 const schedules = [
