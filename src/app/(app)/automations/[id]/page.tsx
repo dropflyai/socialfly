@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import Link from 'next/link'
+import { RejectFeedbackDialog } from '@/components/RejectFeedbackDialog'
 
 const toneOptions = [
   'Professional', 'Casual', 'Friendly', 'Witty', 'Inspirational', 'Educational', 'Bold', 'Conversational',
@@ -286,9 +287,12 @@ export default function AutomationDetailPage({ params }: { params: Promise<{ id:
     setUpcoming(prev => prev.map(p => p.id === postId ? { ...p, status: 'scheduled' } : p))
   }
 
+  const [rejectingPost, setRejectingPost] = useState<PostItem | null>(null)
+
   async function handleRejectDraft(postId: string) {
     await fetch(`/api/posts/schedule?id=${postId}`, { method: 'DELETE' })
     setUpcoming(prev => prev.filter(p => p.id !== postId))
+    setRejectingPost(null)
   }
 
   if (loading) {
@@ -401,7 +405,7 @@ export default function AutomationDetailPage({ params }: { params: Promise<{ id:
                       <Button size="sm" className="flex-1 gap-1" onClick={() => handleApproveDraft(post.id)}>
                         <Send className="h-3 w-3" />Approve & Schedule
                       </Button>
-                      <Button size="sm" variant="outline" className="flex-1 gap-1 text-destructive" onClick={() => handleRejectDraft(post.id)}>
+                      <Button size="sm" variant="outline" className="flex-1 gap-1 text-destructive" onClick={() => setRejectingPost(post)}>
                         <X className="h-3 w-3" />Reject
                       </Button>
                     </div>
@@ -651,6 +655,18 @@ export default function AutomationDetailPage({ params }: { params: Promise<{ id:
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Rejection feedback dialog */}
+      {rejectingPost && (
+        <RejectFeedbackDialog
+          postText={rejectingPost.text}
+          ruleId={id}
+          onSubmit={() => handleRejectDraft(rejectingPost.id)}
+          onCancel={() => {
+            handleRejectDraft(rejectingPost.id)
+          }}
+        />
+      )}
     </div>
   )
 }

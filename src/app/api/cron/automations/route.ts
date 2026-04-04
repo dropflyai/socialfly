@@ -200,6 +200,35 @@ async function executeAutomation(
     brandContext = `Tone: ${userTone}.`
   }
 
+  // Load rejection feedback to improve content
+  let feedbackContext = ''
+  const { data: feedback } = await supabase
+    .from('automation_feedback')
+    .select('rejected_text, issues, suggestion')
+    .eq('rule_id', rule.id)
+    .order('created_at', { ascending: false })
+    .limit(5)
+
+  if (feedback?.length) {
+    const issueLabels: Record<string, string> = {
+      wrong_topic: 'wrong topic',
+      wrong_tone: 'wrong tone',
+      too_salesy: 'too promotional/salesy',
+      too_generic: 'too generic/boring',
+      off_brand: 'doesn\'t match brand voice',
+      wrong_length: 'wrong length',
+    }
+
+    feedbackContext = '\n\nIMPORTANT — The user has rejected previous posts. Learn from this feedback and avoid similar mistakes:\n'
+    for (const fb of feedback) {
+      const issues = (fb.issues as string[]).map(i => issueLabels[i] || i).join(', ')
+      feedbackContext += `- REJECTED: "${(fb.rejected_text as string).slice(0, 100)}..." — Issues: ${issues}`
+      if (fb.suggestion) feedbackContext += ` — User wants: "${fb.suggestion}"`
+      feedbackContext += '\n'
+    }
+    feedbackContext += '\nDo NOT repeat these patterns. Adjust your approach based on this feedback.\n'
+  }
+
   // Pick a random topic for this run if multiple provided
   const todaysTopic = topics.length > 0
     ? topics[Math.floor(Math.random() * topics.length)]
@@ -306,7 +335,7 @@ Create a post that encourages engagement. Include hashtags.`
     messages: [{
       role: 'user',
       content: `${prompt}
-
+${feedbackContext}
 Generate platform-specific versions for: ${platforms.join(', ')}
 
 Platform specs:
