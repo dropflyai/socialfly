@@ -68,6 +68,41 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ success: true, status: 'scheduled' })
   }
 
+  if (action === 'edit') {
+    // Update the draft text
+    const body = await request.json()
+    const { text } = body
+
+    // Get current custom_content and merge the new text
+    const { data: post } = await serviceClient
+      .from('scheduled_posts')
+      .select('custom_content')
+      .eq('id', postId)
+      .eq('user_id', user.id)
+      .single()
+
+    if (!post) {
+      return NextResponse.json({ error: 'Post not found' }, { status: 404 })
+    }
+
+    const updatedContent = { ...(post.custom_content as Record<string, unknown>), text }
+
+    const { error } = await serviceClient
+      .from('scheduled_posts')
+      .update({
+        custom_content: updatedContent,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', postId)
+      .eq('user_id', user.id)
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true })
+  }
+
   return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
 }
 
