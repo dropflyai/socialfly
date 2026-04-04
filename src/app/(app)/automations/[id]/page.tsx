@@ -398,9 +398,9 @@ export default function EditAutomationPage({ params }: { params: Promise<{ id: s
                   <div key={platform} className="p-3 rounded-lg border bg-muted/30 space-y-2">
                     <div className="text-xs font-medium text-primary capitalize">{platform}</div>
                     <p className="text-sm whitespace-pre-wrap">{variant.text}</p>
-                    {variant.hashtags?.length > 0 && (
+                    {(variant.hashtags?.length ?? 0) > 0 && (
                       <div className="flex flex-wrap gap-1">
-                        {variant.hashtags.map(tag => (
+                        {variant.hashtags!.map(tag => (
                           <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
                         ))}
                       </div>
