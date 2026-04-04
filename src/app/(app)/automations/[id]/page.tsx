@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, Save, Loader2, ImageIcon, Eye, Send, Trash2, Sparkles, Check, X,
   BarChart3, Clock, Calendar, Heart, MessageCircle, Zap, Play, Pause, Pencil, RefreshCw,
+  ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -41,6 +42,7 @@ interface PostItem {
   postedAt?: string
   text: string
   mediaUrls: string[]
+  variants?: Record<string, { text: string; hashtags?: string[] }> | null
   metrics?: Record<string, { likes?: number; comments?: number }>
   createdAt: string
 }
@@ -415,28 +417,9 @@ export default function AutomationDetailPage({ params }: { params: Promise<{ id:
           {/* Pending Review */}
           {upcoming.filter(p => p.status === 'draft').length > 0 && (
             <div className="space-y-3">
-              <h3 className="font-semibold flex items-center gap-2"><Clock className="h-4 w-4" />Pending Review</h3>
+              <h3 className="font-semibold flex items-center gap-2"><Clock className="h-4 w-4" />Pending Review ({upcoming.filter(p => p.status === 'draft').length})</h3>
               {upcoming.filter(p => p.status === 'draft').map(post => (
-                <Card key={post.id} className="overflow-hidden">
-                  {post.mediaUrls.length > 0 && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={post.mediaUrls[0]} alt="" className="w-full h-40 object-cover" />
-                  )}
-                  <CardContent className="p-4 space-y-3">
-                    <p className="text-sm whitespace-pre-wrap">{post.text}</p>
-                    <div className="flex items-center gap-1">
-                      {post.platforms.map(p => <Badge key={p} variant="secondary" className="text-xs capitalize">{p}</Badge>)}
-                    </div>
-                    <div className="flex gap-2">
-                      <Button size="sm" className="flex-1 gap-1" onClick={() => handleApproveDraft(post.id)}>
-                        <Send className="h-3 w-3" />Approve & Schedule
-                      </Button>
-                      <Button size="sm" variant="outline" className="flex-1 gap-1 text-destructive" onClick={() => setRejectingPost(post)}>
-                        <X className="h-3 w-3" />Reject
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
+                <DraftReviewCard key={post.id} post={post} onApprove={handleApproveDraft} onReject={(p) => setRejectingPost(p)} />
               ))}
             </div>
           )}
@@ -694,5 +677,124 @@ export default function AutomationDetailPage({ params }: { params: Promise<{ id:
         />
       )}
     </div>
+  )
+}
+
+// Expandable draft review card with full platform previews
+function DraftReviewCard({
+  post,
+  onApprove,
+  onReject,
+}: {
+  post: PostItem
+  onApprove: (id: string) => void
+  onReject: (post: PostItem) => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [selectedPlatform, setSelectedPlatform] = useState(post.platforms[0] || 'instagram')
+
+  const platformText = post.variants?.[selectedPlatform]?.text || post.text
+  const platformHashtags = post.variants?.[selectedPlatform]?.hashtags || []
+
+  return (
+    <Card className="overflow-hidden">
+      {/* Collapsed view — preview */}
+      <CardContent className="p-0">
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="w-full p-4 text-left hover:bg-muted/30 transition-colors"
+        >
+          <div className="flex gap-3">
+            {post.mediaUrls.length > 0 && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={post.mediaUrls[0]} alt="" className="w-16 h-16 rounded-lg object-cover flex-shrink-0" />
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm line-clamp-2">{post.text}</p>
+              <div className="flex items-center gap-2 mt-2">
+                {post.platforms.map(p => (
+                  <Badge key={p} variant="secondary" className="text-[10px] capitalize">{p}</Badge>
+                ))}
+                <span className="text-[10px] text-muted-foreground">
+                  {new Date(post.createdAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+            </div>
+            <div className="flex-shrink-0 self-center">
+              {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+            </div>
+          </div>
+        </button>
+
+        {/* Expanded view — full preview */}
+        {expanded && (
+          <div className="border-t">
+            {/* Platform tabs */}
+            {post.platforms.length > 1 && (
+              <div className="flex border-b px-4 pt-3 gap-1">
+                {post.platforms.map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setSelectedPlatform(p)}
+                    className={`px-3 py-1.5 rounded-t-lg text-xs font-medium transition-all ${
+                      selectedPlatform === p
+                        ? 'bg-primary/10 text-primary border-b-2 border-primary'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {p.charAt(0).toUpperCase() + p.slice(1)}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Phone mockup preview */}
+            <div className="p-4 flex justify-center">
+              <div className="w-full max-w-sm border rounded-2xl overflow-hidden bg-background shadow-lg">
+                {/* Platform header */}
+                <div className="p-3 border-b flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                    <span className="text-xs font-bold text-primary">S</span>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold">socialfly</p>
+                    <p className="text-[10px] text-muted-foreground capitalize">{selectedPlatform}</p>
+                  </div>
+                </div>
+
+                {/* Image */}
+                {post.mediaUrls.length > 0 && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={post.mediaUrls[0]} alt="" className="w-full aspect-square object-cover" />
+                )}
+
+                {/* Post text */}
+                <div className="p-3 space-y-2">
+                  <p className="text-sm whitespace-pre-wrap">{platformText}</p>
+
+                  {platformHashtags.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {platformHashtags.map(tag => (
+                        <span key={tag} className="text-xs text-primary">{tag}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="p-4 border-t flex gap-2">
+              <Button size="sm" className="flex-1 gap-1" onClick={() => onApprove(post.id)}>
+                <Send className="h-3 w-3" />Approve & Schedule
+              </Button>
+              <Button size="sm" variant="outline" className="flex-1 gap-1 text-destructive" onClick={() => onReject(post)}>
+                <X className="h-3 w-3" />Reject
+              </Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }

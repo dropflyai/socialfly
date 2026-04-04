@@ -58,6 +58,7 @@ export async function GET(request: NextRequest) {
       scheduledFor: p.scheduled_for,
       text: (p.custom_content as { text?: string })?.text || '',
       mediaUrls: (p.custom_content as { media_urls?: string[] })?.media_urls || [],
+      variants: (p.custom_content as { variants?: Record<string, { text: string; hashtags?: string[] }> })?.variants || null,
       createdAt: p.created_at,
     })),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
