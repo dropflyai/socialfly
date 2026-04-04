@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { name, type, config, actionType, actionConfig, description } = body
+  const { name, type, config, actionType, actionConfig, description, platforms, schedule } = body
 
   if (!name || !type) {
     return NextResponse.json({ error: 'Missing name or type' }, { status: 400 })
@@ -69,9 +69,9 @@ export async function POST(request: NextRequest) {
       name,
       description: description || null,
       trigger_type: type,
-      trigger_config: config || {},
+      trigger_config: { ...(config || {}), schedule: schedule || 'daily' },
       action_type: actionType || 'generate_and_post',
-      action_config: actionConfig || {},
+      action_config: { ...(actionConfig || {}), platforms: platforms || ['instagram'] },
       is_active: true,
       trigger_count: 0,
       success_count: 0,
