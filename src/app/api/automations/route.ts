@@ -33,7 +33,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ rules: rules || [] })
+  // Map DB columns to frontend expected shape
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mapped = (rules || []).map((r: any) => ({
+    id: r.id,
+    name: r.name,
+    type: r.trigger_config?.originalType || r.trigger_type,
+    config: r.trigger_config || {},
+    platforms: r.action_config?.platforms || [],
+    schedule: r.trigger_config?.schedule || 'daily',
+    status: r.is_active ? 'active' : 'paused',
+    last_run: r.last_triggered_at,
+    run_count: r.trigger_count || 0,
+    created_at: r.created_at,
+  }))
+
+  return NextResponse.json({ rules: mapped })
 }
 
 // POST /api/automations — create a new automation rule
