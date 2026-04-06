@@ -9,13 +9,16 @@
  * Providers:
  * - FAL.ai (Flux) — Best for artistic/stylized images, fast, reliable
  * - Nano Banana (Google Gemini) — Best for text-in-images, editing, 4K, character consistency
+ * - DALL-E 3 (OpenAI) — Excels at photorealism, creative concepts, following complex prompts
+ * - Stability AI (SD 3.5) — Best for consistent style, architectural/product shots, fine detail, cost-effective
  *
  * The router scores each provider per request and picks the winner.
  */
 
 import { fal } from '@fal-ai/client'
 import { GoogleGenAI } from '@google/genai'
-import { getConfig } from './config'
+import OpenAI from 'openai'
+import { getConfig, getSupabase } from './config'
 import type { GeneratedImage, GenerateImageOptions, ImageProvider, ImageProviderScore } from './types'
 
 // ============================================================================
@@ -33,7 +36,7 @@ interface ProviderCapabilities {
   costEfficiency: number   // 0-10: How cheap?
 }
 
-const PROVIDER_CAPABILITIES: Record<'fal' | 'nanobanana', ProviderCapabilities> = {
+const PROVIDER_CAPABILITIES: Record<'fal' | 'nanobanana' | 'dalle' | 'stability', ProviderCapabilities> = {
   fal: {
     textInImage: 2,          // Flux is weak at text rendering
     artisticStyle: 9,        // Excellent for creative/artistic images
@@ -53,6 +56,26 @@ const PROVIDER_CAPABILITIES: Record<'fal' | 'nanobanana', ProviderCapabilities> 
     characterConsistency: true, // Up to 5 characters, 14 objects
     speed: 7,                // Good but slightly slower than Flux
     costEfficiency: 9,       // Free tier available
+  },
+  dalle: {
+    textInImage: 5,          // Decent text rendering, better than Flux
+    artisticStyle: 8,        // Strong creative/artistic capabilities
+    photoRealism: 9,         // Excellent photorealism
+    maxResolution: 1792,     // 1024x1024, 1024x1792, 1792x1024
+    imageEditing: false,     // No editing via this API
+    characterConsistency: false,
+    speed: 7,                // Moderate speed
+    costEfficiency: 5,       // Higher cost per image
+  },
+  stability: {
+    textInImage: 3,          // Limited text rendering
+    artisticStyle: 8,        // Strong consistent style output
+    photoRealism: 8,         // Good photorealism
+    maxResolution: 1536,     // Up to 1536px (various aspect ratios)
+    imageEditing: false,     // No editing via SD3 endpoint
+    characterConsistency: false,
+    speed: 7,                // Moderate speed
+    costEfficiency: 8,       // Cost-effective for high volume
   },
 }
 
@@ -79,6 +102,7 @@ export function scoreProviders(request: RouteRequest): ImageProviderScore[] {
   const config = getConfig()
   const hasGemini = !!config.geminiApiKey
   const hasFal = !!config.falApiKey
+  const hasOpenAI = !!config.openaiApiKey
 
   const scores: ImageProviderScore[] = []
 
@@ -181,6 +205,146 @@ export function scoreProviders(request: RouteRequest): ImageProviderScore[] {
     scores.push({ provider: 'nanobanana', score: Math.max(0, score), reasons })
   }
 
+  // Score DALL-E 3
+  if (hasOpenAI) {
+    let score = 45 // Slightly lower base — it's a tertiary option
+    const reasons: string[] = []
+
+    if (request.needsTextOverlay) {
+      score -= 10
+      reasons.push('DALL-E decent but not best at text-in-image (-10)')
+    }
+
+    if (request.needsEditing) {
+      score -= 50
+      reasons.push('DALL-E 3 does not support image editing (-50)')
+    }
+
+    if (request.needsHighRes) {
+      score -= 5
+      reasons.push('DALL-E max 1792px (-5)')
+    }
+
+    if (request.needsConsistency) {
+      score -= 20
+      reasons.push('DALL-E has no character consistency (-20)')
+    }
+
+    // DALL-E excels at photorealism
+    const photoKeywords = ['photo', 'photograph', 'photorealistic', 'realistic', 'real life', 'cinematic', 'portrait', 'headshot']
+    if (photoKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
+      score += 20
+      reasons.push('Photorealistic content detected, DALL-E excels (+20)')
+    }
+
+    // DALL-E excels at creative concepts and complex prompts
+    const creativeKeywords = ['concept art', 'creative', 'imaginative', 'unique', 'original', 'innovative', 'futuristic', 'sci-fi', 'dystopian']
+    if (creativeKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
+      score += 15
+      reasons.push('Creative concept detected, DALL-E handles complex prompts well (+15)')
+    }
+
+    // DALL-E is good at following detailed/complex prompts
+    if (request.prompt.length > 200) {
+      score += 10
+      reasons.push('Complex prompt detected, DALL-E follows detailed instructions well (+10)')
+    }
+
+    // Artistic styles — DALL-E is solid but FAL still leads
+    const artisticKeywords = ['artistic', 'illustration', 'painting', 'watercolor', 'abstract', 'surreal', 'fantasy', 'anime', 'cartoon']
+    if (artisticKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
+      score += 5
+      reasons.push('Artistic style, DALL-E is capable (+5)')
+    }
+
+    // Check for text-in-image — DALL-E is middling
+    const textKeywords = ['text saying', 'with text', 'with the words', 'caption', 'headline', 'banner', 'sign that says', 'logo text', 'quote']
+    if (textKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
+      score -= 10
+      reasons.push('Text rendering detected, DALL-E middling (-10)')
+    }
+
+    scores.push({ provider: 'dalle', score: Math.max(0, score), reasons })
+  }
+
+  // Score Stability AI
+  const hasStability = !!config.stabilityApiKey
+  if (hasStability) {
+    let score = 48 // Moderate base score
+    const reasons: string[] = []
+
+    if (request.needsTextOverlay) {
+      score -= 25
+      reasons.push('Stability weak at text-in-image (-25)')
+    }
+
+    if (request.needsEditing) {
+      score -= 50
+      reasons.push('Stability SD3 does not support image editing (-50)')
+    }
+
+    if (request.needsHighRes) {
+      score -= 10
+      reasons.push('Stability max 1536px (-10)')
+    }
+
+    if (request.needsConsistency) {
+      score -= 20
+      reasons.push('Stability has no character consistency (-20)')
+    }
+
+    // Stability excels at product photography and architectural shots
+    const productKeywords = ['product', 'product photography', 'product shot', 'e-commerce', 'catalog', 'merchandise', 'packaging', 'bottle', 'device', 'gadget']
+    if (productKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
+      score += 25
+      reasons.push('Product photography detected, Stability excels (+25)')
+    }
+
+    // Stability excels at architectural/interior shots
+    const architectureKeywords = ['architecture', 'architectural', 'building', 'interior', 'exterior', 'room', 'house', 'office space', 'real estate', 'property', 'facade']
+    if (architectureKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
+      score += 20
+      reasons.push('Architectural content detected, Stability excels (+20)')
+    }
+
+    // Stability is great for consistent branding and style
+    const brandingKeywords = ['brand', 'branding', 'consistent', 'style guide', 'on-brand', 'brand identity', 'corporate', 'uniform style']
+    if (brandingKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
+      score += 20
+      reasons.push('Consistent branding detected, Stability excels (+20)')
+    }
+
+    // Stability handles fine detail work well
+    const detailKeywords = ['detailed', 'fine detail', 'intricate', 'precision', 'high detail', 'texture', 'close-up', 'macro', 'crisp']
+    if (detailKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
+      score += 15
+      reasons.push('Fine detail work detected, Stability handles well (+15)')
+    }
+
+    // Cost-effective for volume work
+    const volumeKeywords = ['batch', 'series', 'collection', 'set of', 'multiple', 'variations']
+    if (volumeKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
+      score += 10
+      reasons.push('Volume content, Stability is cost-effective (+10)')
+    }
+
+    // Check for text-in-image — Stability is weak
+    const textKeywords = ['text saying', 'with text', 'with the words', 'caption', 'headline', 'banner', 'sign that says', 'logo text', 'quote']
+    if (textKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
+      score -= 15
+      reasons.push('Text rendering detected, Stability weak (-15)')
+    }
+
+    // Artistic styles — Stability is solid but FAL leads
+    const artisticKeywords = ['artistic', 'illustration', 'painting', 'watercolor', 'abstract', 'surreal', 'fantasy', 'anime', 'cartoon']
+    if (artisticKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
+      score += 5
+      reasons.push('Artistic style, Stability is capable (+5)')
+    }
+
+    scores.push({ provider: 'stability', score: Math.max(0, score), reasons })
+  }
+
   // Sort by score descending
   scores.sort((a, b) => b.score - a.score)
 
@@ -190,17 +354,17 @@ export function scoreProviders(request: RouteRequest): ImageProviderScore[] {
 /**
  * Pick the best provider for a request.
  */
-export function pickProvider(request: RouteRequest): 'fal' | 'nanobanana' {
+export function pickProvider(request: RouteRequest): 'fal' | 'nanobanana' | 'dalle' | 'stability' {
   const config = getConfig()
 
   // If user explicitly chose a provider
   if (request.preferredProvider && request.preferredProvider !== 'auto') {
-    return request.preferredProvider as 'fal' | 'nanobanana'
+    return request.preferredProvider as 'fal' | 'nanobanana' | 'dalle' | 'stability'
   }
 
   // If config has a non-auto default
   if (config.defaultImageProvider && config.defaultImageProvider !== 'auto') {
-    return config.defaultImageProvider as 'fal' | 'nanobanana'
+    return config.defaultImageProvider as 'fal' | 'nanobanana' | 'dalle' | 'stability'
   }
 
   // Smart routing
@@ -210,7 +374,7 @@ export function pickProvider(request: RouteRequest): 'fal' | 'nanobanana' {
     return 'fal' // Fallback
   }
 
-  return scores[0].provider as 'fal' | 'nanobanana'
+  return scores[0].provider as 'fal' | 'nanobanana' | 'dalle' | 'stability'
 }
 
 // ============================================================================
@@ -354,6 +518,117 @@ async function editWithNanoBanana(
   }
 }
 
+/**
+ * Generate image via DALL-E 3 (OpenAI).
+ */
+async function generateWithDalle(
+  prompt: string,
+  aspectRatio: string = '1:1'
+): Promise<GeneratedImage> {
+  const config = getConfig()
+  if (!config.openaiApiKey) throw new Error('OPENAI_API_KEY not configured')
+
+  const openai = new OpenAI({ apiKey: config.openaiApiKey })
+
+  // Map aspect ratios to DALL-E 3 supported sizes
+  const size: '1024x1024' | '1024x1792' | '1792x1024' =
+    aspectRatio === '4:5' || aspectRatio === '9:16' ? '1024x1792'
+    : aspectRatio === '16:9' ? '1792x1024'
+    : '1024x1024'
+
+  const response = await openai.images.generate({
+    model: 'dall-e-3',
+    prompt,
+    size,
+    quality: 'hd',
+    n: 1,
+  })
+
+  const imageData = response.data?.[0]
+  if (!imageData?.url) throw new Error('No image generated by DALL-E 3')
+
+  return {
+    url: imageData.url,
+    prompt,
+    enhancedPrompt: imageData.revised_prompt || prompt,
+  }
+}
+
+/**
+ * Generate image via Stability AI (Stable Diffusion 3.5).
+ * Uses the REST API directly with fetch() — no SDK required.
+ */
+async function generateWithStability(
+  prompt: string,
+  aspectRatio: string = '1:1'
+): Promise<GeneratedImage> {
+  const config = getConfig()
+  if (!config.stabilityApiKey) throw new Error('STABILITY_API_KEY not configured')
+
+  // Map aspect ratios to Stability AI supported values
+  const stabilityAspectRatio =
+    aspectRatio === '4:5' ? '4:5'
+    : aspectRatio === '9:16' ? '9:16'
+    : aspectRatio === '16:9' ? '16:9'
+    : '1:1'
+
+  const formData = new FormData()
+  formData.append('prompt', prompt)
+  formData.append('model', 'sd3.5-large')
+  formData.append('aspect_ratio', stabilityAspectRatio)
+  formData.append('output_format', 'png')
+
+  // Add a negative prompt for quality control
+  formData.append('negative_prompt', 'blurry, low quality, distorted, deformed, ugly, bad anatomy, watermark, text overlay')
+
+  const response = await fetch('https://api.stability.ai/v2beta/stable-image/generate/sd3', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${config.stabilityApiKey}`,
+      'Accept': 'image/*',
+    },
+    body: formData,
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Stability AI API error (${response.status}): ${errorText}`)
+  }
+
+  // Response is raw image bytes
+  const imageBuffer = Buffer.from(await response.arrayBuffer())
+
+  if (imageBuffer.length < 100) {
+    throw new Error('Stability AI returned an empty or invalid image')
+  }
+
+  // Upload to Supabase storage
+  const supabase = getSupabase()
+  const timestamp = Date.now()
+  const filePath = `stability/${timestamp}.png`
+
+  const { error: uploadError } = await supabase.storage
+    .from('media')
+    .upload(filePath, imageBuffer, {
+      contentType: 'image/png',
+      upsert: false,
+    })
+
+  if (uploadError) {
+    throw new Error(`Failed to upload Stability image to storage: ${uploadError.message}`)
+  }
+
+  const { data: urlData } = supabase.storage
+    .from('media')
+    .getPublicUrl(filePath)
+
+  return {
+    url: urlData.publicUrl,
+    prompt,
+    enhancedPrompt: prompt,
+  }
+}
+
 // ============================================================================
 // Public API
 // ============================================================================
@@ -385,7 +660,11 @@ export async function smartGenerateImage(
 
   let result: GeneratedImage
 
-  if (provider === 'nanobanana') {
+  if (provider === 'stability') {
+    result = await generateWithStability(prompt, aspectRatio)
+  } else if (provider === 'dalle') {
+    result = await generateWithDalle(prompt, aspectRatio)
+  } else if (provider === 'nanobanana') {
     result = await generateWithNanoBanana(prompt, aspectRatio)
   } else {
     result = await generateWithFal(prompt, aspectRatio)

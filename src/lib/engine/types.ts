@@ -181,8 +181,11 @@ export interface PlatformAnalytics {
   bestPostingTimes: string[]
 }
 
-export type ImageProvider = 'auto' | 'fal' | 'nanobanana'
+export type ImageProvider = 'auto' | 'fal' | 'nanobanana' | 'dalle' | 'stability'
 export type VideoProvider = 'auto' | 'seedance' | 'ltx' | 'minimax'
+export type AudioProvider = 'elevenlabs'
+export type AudioStyle = 'narration' | 'voiceover' | 'podcast_intro' | 'ad_read'
+export type AudioFormat = 'mp3_44100_128' | 'mp3_22050_32' | 'pcm_16000' | 'pcm_44100'
 
 export interface ImageProviderScore {
   provider: ImageProvider
@@ -214,12 +217,53 @@ export interface GeneratedVideo {
   durationSeconds?: number
 }
 
+export interface AudioVoice {
+  id: string
+  name: string
+  gender: 'male' | 'female' | 'neutral'
+  tone: string                    // e.g. 'warm', 'authoritative', 'energetic', 'calm'
+  bestFor: AudioStyle[]           // Which styles this voice excels at
+  accent?: string                 // e.g. 'american', 'british', 'australian'
+  description?: string
+}
+
+export interface AudioProviderScore {
+  provider: AudioProvider
+  score: number
+  reasons: string[]
+}
+
+export interface GenerateAudioOptions {
+  text: string
+  voiceId?: string                // Explicit ElevenLabs voice ID
+  brandId?: string                // Use brand voice profile to auto-select voice
+  style?: AudioStyle              // narration, voiceover, podcast_intro, ad_read
+  speed?: number                  // 0.5 - 2.0 (1.0 = normal)
+  stability?: number              // 0.0 - 1.0 (higher = more consistent, less expressive)
+  similarityBoost?: number        // 0.0 - 1.0 (higher = more similar to original voice)
+  outputFormat?: AudioFormat
+}
+
+export interface GeneratedAudio {
+  url: string
+  text: string
+  voiceId: string
+  voiceName: string
+  provider: AudioProvider
+  style: AudioStyle
+  durationEstimate?: number       // Estimated seconds based on text length
+}
+
 export interface EngineConfig {
   supabaseUrl: string
   supabaseServiceKey: string
   anthropicApiKey: string
   falApiKey: string
   geminiApiKey?: string           // For Nano Banana (Google Gemini)
+  openaiApiKey?: string            // For OpenAI (GPT-4o text fallback + DALL-E 3 images)
+  stabilityApiKey?: string          // For Stability AI (Stable Diffusion 3.5)
+  elevenlabsApiKey?: string        // For ElevenLabs (voice/audio generation)
+  replicateApiToken?: string       // For Replicate (open-source model tools)
   defaultImageProvider?: ImageProvider
   defaultVideoProvider?: VideoProvider
   instagramPageToken?: string
@@ -229,4 +273,18 @@ export interface EngineConfig {
   linkedinAccessToken?: string
   linkedinPersonId?: string
   linkedinOrgId?: string
+}
+
+// ============================================================================
+// Replicate Tool Types
+// ============================================================================
+
+export type ReplicateToolName = 'remove_background' | 'upscale' | 'style_transfer' | 'face_swap' | 'custom'
+
+export interface ReplicateToolResult {
+  success: boolean
+  url: string
+  model: string
+  tool: ReplicateToolName
+  error?: string
 }

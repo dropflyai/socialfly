@@ -97,6 +97,35 @@ export {
   getAvailableVideoModels,
 } from './video-router'
 
+// OpenAI (GPT-4o text fallback + DALL-E 3 images)
+export {
+  generateContentWithOpenAI,
+  analyzeWebsiteContentWithOpenAI,
+  repurposeContentWithOpenAI,
+  enhanceImagePromptWithOpenAI,
+} from '../ai/openai'
+
+// Smart Audio Router (ElevenLabs)
+export {
+  smartGenerateAudio,
+  generateAudioWithVoice,
+  explainAudioRouting,
+  scoreAudioVoices,
+  pickVoice,
+  getAvailableVoices,
+  getAudioStylePresets,
+} from './audio-router'
+
+// Replicate Tools (background removal, upscaling, style transfer, face swap)
+export {
+  removeBackground,
+  upscaleImage,
+  styleTransfer,
+  faceSwap,
+  generateWithCustomModel,
+  getAvailableReplicateTools,
+} from './replicate-tools'
+
 // Newsletter-to-Content Transformer
 export {
   transformNewsToContent,
@@ -135,6 +164,15 @@ export type {
   VideoProviderScore,
   GenerateVideoOptions,
   GeneratedVideo,
+  AudioProvider,
+  AudioProviderScore,
+  AudioStyle,
+  AudioFormat,
+  AudioVoice,
+  GenerateAudioOptions,
+  GeneratedAudio,
+  ReplicateToolName,
+  ReplicateToolResult,
 } from './types'
 
 export type { PipelineResult } from './pipeline'
