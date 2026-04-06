@@ -87,6 +87,16 @@ export {
   pickProvider,
 } from './image-router'
 
+// Smart Video Router (Seedance 2.0 + Minimax + LTX)
+export {
+  smartGenerateVideo,
+  generateVideoWithProvider,
+  explainVideoRouting,
+  scoreVideoProviders,
+  pickVideoProvider,
+  getAvailableVideoModels,
+} from './video-router'
+
 // Newsletter-to-Content Transformer
 export {
   transformNewsToContent,
@@ -121,6 +131,10 @@ export type {
   PlatformAnalytics,
   ImageProvider,
   ImageProviderScore,
+  VideoProvider,
+  VideoProviderScore,
+  GenerateVideoOptions,
+  GeneratedVideo,
 } from './types'
 
 export type { PipelineResult } from './pipeline'

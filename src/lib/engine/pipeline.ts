@@ -8,11 +8,14 @@
 import { generateContent, generateImage } from './generate'
 import { publish, schedule } from './publish'
 import { loadBrandVoice } from './brand'
+import { smartGenerateVideo } from './video-router'
 import type {
   GenerateAndPublishOptions,
   FullPublishResult,
   GeneratedContent,
   GeneratedImage,
+  GeneratedVideo,
+  VideoProvider,
   Platform,
   PostRecord,
 } from './types'
@@ -21,6 +24,7 @@ export interface PipelineResult {
   success: boolean
   content: GeneratedContent
   image?: GeneratedImage
+  video?: GeneratedVideo
   publishResult?: FullPublishResult
   scheduledPost?: PostRecord
   error?: string
@@ -55,7 +59,12 @@ export interface PipelineResult {
  * })
  */
 export async function generateAndPublish(
-  options: GenerateAndPublishOptions
+  options: GenerateAndPublishOptions & {
+    includeVideo?: boolean
+    videoPrompt?: string
+    videoProvider?: VideoProvider
+    videoFromImage?: boolean  // Generate image first, then animate it
+  }
 ): Promise<PipelineResult> {
   const {
     topic,
@@ -64,6 +73,10 @@ export async function generateAndPublish(
     includeImage = false,
     imagePrompt,
     imageAspectRatio = '1:1',
+    includeVideo = false,
+    videoPrompt,
+    videoProvider = 'auto',
+    videoFromImage = false,
     brandId,
     tone,
     scheduleFor,
@@ -71,19 +84,19 @@ export async function generateAndPublish(
 
   try {
     // Step 1: Generate content
+    const contentType = includeVideo ? 'video_script' : includeImage ? 'image_caption' : 'text'
     const content = await generateContent({
       topic,
       platforms,
-      contentType: includeImage ? 'image_caption' : 'text',
+      contentType,
       brandId,
       userId,
       tone,
     })
 
-    // Step 2: Generate image if requested
+    // Step 2: Generate image if requested (or as starting frame for video)
     let image: GeneratedImage | undefined
-    if (includeImage) {
-      // Use explicit image prompt, or derive from content's suggested_media
+    if (includeImage || (includeVideo && videoFromImage)) {
       const primaryPlatform = platforms[0]
       const variant = content.variants[primaryPlatform]
       const baseImagePrompt = imagePrompt
@@ -98,12 +111,28 @@ export async function generateAndPublish(
 
       image = await generateImage({
         prompt: baseImagePrompt,
-        aspectRatio: imageAspectRatio,
+        aspectRatio: includeVideo ? '16:9' : imageAspectRatio,
         enhancePrompt: true,
       })
     }
 
-    // Step 3: Get the text for the primary platform
+    // Step 3: Generate video if requested
+    let video: GeneratedVideo | undefined
+    if (includeVideo) {
+      const primaryPlatform = platforms[0]
+      const variant = content.variants[primaryPlatform]
+      const baseVideoPrompt = videoPrompt
+        || variant?.suggestedMedia
+        || `Professional social media video for: ${topic}`
+
+      video = await smartGenerateVideo({
+        prompt: baseVideoPrompt,
+        imageUrl: videoFromImage && image ? image.url : undefined,
+        preferredProvider: videoProvider,
+      })
+    }
+
+    // Step 4: Get the text for the primary platform
     const primaryPlatform = platforms[0]
     const variant = content.variants[primaryPlatform]
     if (!variant) {
@@ -113,16 +142,15 @@ export async function generateAndPublish(
     // Build the final text with hashtags
     let finalText = variant.text
     if (variant.hashtags?.length) {
-      // Check if hashtags are already in the text
       const hasHashtags = variant.hashtags.some((tag: string) => finalText.includes(tag))
       if (!hasHashtags) {
         finalText += '\n\n' + variant.hashtags.join(' ')
       }
     }
 
-    // Step 4: Publish or schedule
-    const mediaUrls = image ? [image.url] : undefined
-    const mediaType = image ? 'image' as const : undefined
+    // Step 5: Determine media for publishing
+    const mediaUrls = video ? [video.url] : image ? [image.url] : undefined
+    const mediaType = video ? 'video' as const : image ? 'image' as const : undefined
 
     if (scheduleFor) {
       const scheduledPost = await schedule({
@@ -139,6 +167,7 @@ export async function generateAndPublish(
         success: true,
         content,
         image,
+        video,
         scheduledPost,
       }
     }
@@ -156,6 +185,7 @@ export async function generateAndPublish(
       success: publishResult.success,
       content,
       image,
+      video,
       publishResult,
     }
   } catch (error) {

@@ -146,7 +146,7 @@ function CreateContentContent() {
   const [videoPrompt, setVideoPrompt] = useState('')
   const [generatedVideoUrl, setGeneratedVideoUrl] = useState('')
   const [generatingVideo, setGeneratingVideo] = useState(false)
-  const [videoModel, setVideoModel] = useState<'fast' | 'quality'>('fast')
+  const [videoModel, setVideoModel] = useState<'fast' | 'quality' | 'seedance' | 'auto'>('auto')
   const [useImageForVideo, setUseImageForVideo] = useState(false)
   const [videoImagePrompt, setVideoImagePrompt] = useState('')
   const [videoImageUrl, setVideoImageUrl] = useState('')
@@ -582,26 +582,45 @@ function CreateContentContent() {
               {/* Model Selection */}
               <div className="space-y-2">
                 <Label>Video Model</Label>
-                <div className="flex gap-3">
+                <div className="flex flex-wrap gap-2">
                   <Button
-                    variant={videoModel === 'fast' ? 'default' : 'outline'}
+                    variant={videoModel === 'auto' ? 'default' : 'outline'}
                     size="sm"
-                    onClick={() => setVideoModel('fast')}
+                    onClick={() => setVideoModel('auto')}
                   >
-                    Fast (~$0.02)
+                    Auto (Smart)
+                  </Button>
+                  <Button
+                    variant={videoModel === 'seedance' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setVideoModel('seedance')}
+                    className="gap-1.5"
+                  >
+                    <span className="text-xs">🏆</span> Seedance 2.0 (~$0.80)
                   </Button>
                   <Button
                     variant={videoModel === 'quality' ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => setVideoModel('quality')}
                   >
-                    Quality (~$0.50)
+                    Minimax (~$0.50)
+                  </Button>
+                  <Button
+                    variant={videoModel === 'fast' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setVideoModel('fast')}
+                  >
+                    LTX Fast (~$0.02)
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {videoModel === 'fast'
+                  {videoModel === 'auto'
+                    ? 'AI picks the best model based on your prompt (Seedance for cinematic, LTX for drafts)'
+                    : videoModel === 'seedance'
+                    ? 'Seedance 2.0 -- #1 ranked AI video model. Cinematic quality, best motion and character consistency'
+                    : videoModel === 'fast'
                     ? 'LTX Video -- fast generation, good for testing and drafts'
-                    : 'Minimax Video -- higher quality, better for final posts'}
+                    : 'Minimax Video -- higher quality, good for product showcases'}
                 </p>
               </div>
 
@@ -700,9 +719,13 @@ function CreateContentContent() {
                     <div>
                       <p className="text-sm font-medium">Generating your video...</p>
                       <p className="text-xs text-muted-foreground">
-                        {videoModel === 'quality'
-                          ? 'Quality mode takes 1-3 minutes. Please wait.'
-                          : 'Fast mode takes 10-30 seconds.'}
+                        {videoModel === 'seedance'
+                          ? 'Seedance 2.0 generates cinematic video in 2-4 minutes. Please wait.'
+                          : videoModel === 'quality'
+                          ? 'Minimax quality mode takes 1-3 minutes. Please wait.'
+                          : videoModel === 'auto'
+                          ? 'AI is selecting the best model and generating. This may take 1-4 minutes.'
+                          : 'LTX fast mode takes 10-30 seconds.'}
                       </p>
                     </div>
                   </div>

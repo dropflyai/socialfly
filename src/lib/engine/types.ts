@@ -182,11 +182,36 @@ export interface PlatformAnalytics {
 }
 
 export type ImageProvider = 'auto' | 'fal' | 'nanobanana'
+export type VideoProvider = 'auto' | 'seedance' | 'ltx' | 'minimax'
 
 export interface ImageProviderScore {
   provider: ImageProvider
   score: number
   reasons: string[]
+}
+
+export interface VideoProviderScore {
+  provider: VideoProvider
+  score: number
+  reasons: string[]
+}
+
+export interface GenerateVideoOptions {
+  prompt: string
+  imageUrl?: string             // For image-to-video mode
+  aspectRatio?: '16:9' | '9:16' | '1:1'
+  duration?: number             // Seconds (5-10 default)
+  enhancePrompt?: boolean
+  preferredProvider?: VideoProvider
+}
+
+export interface GeneratedVideo {
+  url: string
+  prompt: string
+  enhancedPrompt?: string
+  provider: string
+  model: string
+  durationSeconds?: number
 }
 
 export interface EngineConfig {
@@ -196,6 +221,7 @@ export interface EngineConfig {
   falApiKey: string
   geminiApiKey?: string           // For Nano Banana (Google Gemini)
   defaultImageProvider?: ImageProvider
+  defaultVideoProvider?: VideoProvider
   instagramPageToken?: string
   instagramAccountId?: string
   facebookPageToken?: string
