@@ -134,6 +134,13 @@ export {
   transformNewsletterText,
 } from './newsletter-transformer'
 
+// Content Orchestra (unified orchestration layer)
+export {
+  orchestrateContent,
+  getProviderPerformanceReport,
+  getSpendReport,
+} from './orchestra'
+
 // Types
 export type {
   Platform,
@@ -173,6 +180,20 @@ export type {
   GeneratedAudio,
   ReplicateToolName,
   ReplicateToolResult,
+  OrchestraRequest,
+  OrchestraResult,
+  OrchestraTextResult,
+  OrchestraImageResult,
+  OrchestraVideoResult,
+  OrchestraAudioResult,
+  OrchestraPostProcessingResult,
+  OrchestraProviderBreakdown,
+  OrchestraBudget,
+  OrchestraUrgency,
+  OrchestraContentType,
+  ProviderPerformanceRecord,
+  ProviderPerformanceReport,
+  SpendReport,
 } from './types'
 
 export type { PipelineResult } from './pipeline'

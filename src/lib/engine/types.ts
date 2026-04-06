@@ -288,3 +288,112 @@ export interface ReplicateToolResult {
   tool: ReplicateToolName
   error?: string
 }
+
+// ============================================================================
+// Content Orchestra Types
+// ============================================================================
+
+export type OrchestraBudget = 'low' | 'medium' | 'premium'
+export type OrchestraUrgency = 'draft' | 'scheduled' | 'immediate'
+export type OrchestraContentType = 'text' | 'image' | 'video' | 'audio'
+
+export interface OrchestraRequest {
+  brief: string
+  brandId: string
+  platforms: Platform[]
+  contentTypes: OrchestraContentType[]
+  style?: string
+  urgency?: OrchestraUrgency
+  budget?: OrchestraBudget
+  abTest?: boolean
+  userId?: string
+  imageAspectRatio?: '1:1' | '4:5' | '9:16' | '16:9'
+  audioStyle?: AudioStyle
+  videoFromImage?: boolean
+}
+
+export interface OrchestraTextResult {
+  content: string
+  platform_variants: Record<string, PlatformVariant>
+  contentPillar: string
+  engagementHooks: string[]
+}
+
+export interface OrchestraImageResult {
+  url: string
+  provider: string
+  enhanced: boolean
+  cost: number
+}
+
+export interface OrchestraVideoResult {
+  url: string
+  provider: string
+  duration: number
+  cost: number
+}
+
+export interface OrchestraAudioResult {
+  url: string
+  voice: string
+  duration: number
+  cost: number
+}
+
+export interface OrchestraPostProcessingResult {
+  applied: string[]
+  before_url: string
+  after_url: string
+}
+
+export interface OrchestraProviderBreakdown {
+  provider: string
+  type: string
+  time_ms: number
+  cost: number
+  success: boolean
+  error?: string
+}
+
+export interface OrchestraResult {
+  text?: OrchestraTextResult
+  image?: OrchestraImageResult
+  video?: OrchestraVideoResult
+  audio?: OrchestraAudioResult
+  postProcessing?: OrchestraPostProcessingResult
+  totalCost: number
+  qualityScore: number
+  providerBreakdown: OrchestraProviderBreakdown[]
+  abTestGroup?: 'A' | 'B'
+  warnings: string[]
+}
+
+export interface ProviderPerformanceRecord {
+  provider: string
+  content_type: string
+  success: boolean
+  generation_time_ms: number
+  estimated_cost: number
+  was_fallback: boolean
+  ab_test_group?: string
+  created_at?: string
+}
+
+export interface ProviderPerformanceReport {
+  provider: string
+  content_type: string
+  total_requests: number
+  success_count: number
+  failure_count: number
+  success_rate: number
+  avg_generation_time_ms: number
+  total_cost: number
+  avg_cost: number
+}
+
+export interface SpendReport {
+  period: string
+  total_cost: number
+  by_provider: { provider: string; cost: number; count: number }[]
+  by_content_type: { content_type: string; cost: number; count: number }[]
+}
