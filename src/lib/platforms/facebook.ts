@@ -256,15 +256,46 @@ export async function getFacebookPostInsights(
   postId: string,
   metrics: string[] = ['post_impressions', 'post_engagements', 'post_clicks', 'post_reactions_by_type_total']
 ): Promise<Record<string, unknown>[]> {
-  const res = await fetch(
-    `${GRAPH_API_BASE}/${postId}/insights?metric=${metrics.join(',')}&access_token=${accessToken}`
-  )
+  // Try with full metrics first, fall back to basic if some are invalid for this post type
+  const metricSets = [
+    metrics,
+    ['post_impressions', 'post_engagements'],
+    ['post_impressions'],
+  ]
 
-  if (!res.ok) {
-    const error = await res.text()
-    throw new Error(`Facebook post insights failed: ${error}`)
+  for (const metricSet of metricSets) {
+    const res = await fetch(
+      `${GRAPH_API_BASE}/${postId}/insights?metric=${metricSet.join(',')}&access_token=${accessToken}`
+    )
+
+    if (res.ok) {
+      const data = await res.json()
+      return data.data || []
+    }
+
+    // If last attempt also fails, try the basic engagement endpoint as fallback
+    if (metricSet.length === 1) {
+      // Fall back to basic post fields instead of insights API
+      const basicRes = await fetch(
+        `${GRAPH_API_BASE}/${postId}?fields=likes.summary(true),comments.summary(true),shares&access_token=${accessToken}`
+      )
+      if (basicRes.ok) {
+        const basicData = await basicRes.json()
+        return [{
+          name: 'post_engagements_basic',
+          values: [{
+            value: {
+              likes: basicData.likes?.summary?.total_count || 0,
+              comments: basicData.comments?.summary?.total_count || 0,
+              shares: basicData.shares?.count || 0,
+            }
+          }]
+        }]
+      }
+    }
   }
 
-  const data = await res.json()
-  return data.data || []
+  // If everything fails, return empty rather than throwing
+  console.warn(`Facebook insights unavailable for post ${postId} — returning empty metrics`)
+  return []
 }

@@ -19,6 +19,7 @@ import {
   Megaphone,
   LayoutTemplate,
   Lock,
+  TrendingUp,
 } from 'lucide-react'
 import { useUIStore } from '@/stores/ui-store'
 import { Button } from '@/components/ui/button'
@@ -38,6 +39,7 @@ const mainNavItems: NavItem[] = [
   { title: 'Schedule', href: '/schedule', icon: Calendar },
   { title: 'Automations', href: '/automations', icon: Zap, minTier: 'pro' },
   { title: 'Analytics', href: '/analytics', icon: BarChart3 },
+  { title: 'Growth', href: '/growth', icon: TrendingUp },
 ]
 
 const secondaryNavItems: NavItem[] = [
