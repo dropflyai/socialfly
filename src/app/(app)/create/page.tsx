@@ -239,6 +239,57 @@ export default function CreatorPage() {
         </div>
       </div>
 
+      {/* Media action panel — shows when media is selected */}
+      {selectedMedia && !showMediaPicker && (
+        <div className="border-b p-3 bg-primary/5">
+          <div className="flex items-center gap-3 mb-2">
+            {selectedMedia.type === 'video' ? (
+              <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                <Video className="h-5 w-5 text-muted-foreground" />
+              </div>
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={selectedMedia.url} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{selectedMedia.name}</p>
+              <p className="text-xs text-muted-foreground capitalize">{selectedMedia.type}</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {selectedMedia.type === 'image' && (
+              <>
+                <button onClick={() => sendMessage(`Animate this image into a cinematic video for Instagram`)} className="px-2.5 py-1 rounded-full border text-xs hover:bg-primary/10 hover:border-primary/30 transition-all">
+                  <Play className="h-3 w-3 inline mr-1" />Animate to Video
+                </button>
+                <button onClick={() => sendMessage(`Edit this image — suggest some creative edits`)} className="px-2.5 py-1 rounded-full border text-xs hover:bg-primary/10 hover:border-primary/30 transition-all">
+                  <Sparkles className="h-3 w-3 inline mr-1" />AI Edit
+                </button>
+                <button onClick={() => sendMessage(`Create variations of this image in different styles`)} className="px-2.5 py-1 rounded-full border text-xs hover:bg-primary/10 hover:border-primary/30 transition-all">
+                  <RefreshCw className="h-3 w-3 inline mr-1" />Variations
+                </button>
+                <button onClick={() => sendMessage(`Write captions for this image for Instagram, Facebook, and LinkedIn`)} className="px-2.5 py-1 rounded-full border text-xs hover:bg-primary/10 hover:border-primary/30 transition-all">
+                  <Send className="h-3 w-3 inline mr-1" />Write Captions
+                </button>
+              </>
+            )}
+            {selectedMedia.type === 'video' && (
+              <>
+                <button onClick={() => sendMessage(`Create a shorter version of this video for Instagram Reels`)} className="px-2.5 py-1 rounded-full border text-xs hover:bg-primary/10 hover:border-primary/30 transition-all">
+                  <Video className="h-3 w-3 inline mr-1" />Reels Version
+                </button>
+                <button onClick={() => sendMessage(`Write captions for this video for Instagram, TikTok, and LinkedIn`)} className="px-2.5 py-1 rounded-full border text-xs hover:bg-primary/10 hover:border-primary/30 transition-all">
+                  <Send className="h-3 w-3 inline mr-1" />Write Captions
+                </button>
+              </>
+            )}
+            <button onClick={() => sendMessage(`What else can I create with this ${selectedMedia.type}?`)} className="px-2.5 py-1 rounded-full border text-xs hover:bg-primary/10 hover:border-primary/30 transition-all">
+              More Ideas
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Media picker dropdown */}
       {showMediaPicker && availableMedia.length > 0 && (
         <div className="border-b p-3 bg-muted/30">
