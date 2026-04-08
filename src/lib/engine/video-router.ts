@@ -296,7 +296,12 @@ async function generateWithSeedance(
     input.image_url = imageUrl
   }
 
-  const result = await fal.subscribe(modelId, { input })
+  const result = await fal.subscribe(modelId, {
+    input,
+    pollInterval: 5000,
+    timeout: 270000,
+    logs: true,
+  })
 
   const videoUrl = extractVideoUrl(result.data)
   if (!videoUrl) {
@@ -379,7 +384,12 @@ async function generateWithKling(
     input.image_url = imageUrl
   }
 
-  const result = await fal.subscribe(modelId, { input })
+  const result = await fal.subscribe(modelId, {
+    input,
+    pollInterval: 5000,   // Check every 5 seconds
+    timeout: 270000,       // 4.5 min timeout (under Vercel's 5 min limit)
+    logs: true,
+  })
 
   const videoUrl = extractVideoUrl(result.data)
   if (!videoUrl) {

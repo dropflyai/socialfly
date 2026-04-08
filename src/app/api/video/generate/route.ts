@@ -115,25 +115,29 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error(`Video generation error (provider: ${provider}):`, error)
 
-    // Fallback: if the requested model failed, try LTX (fast/reliable)
-    if (provider !== 'ltx') {
+    // Cascade fallback: try the next best model down the quality chain
+    const fallbackChain: ('seedance' | 'kling' | 'minimax' | 'ltx')[] = ['seedance', 'kling', 'minimax', 'ltx']
+    const startIdx = fallbackChain.indexOf(provider as typeof fallbackChain[number])
+    const fallbacks = fallbackChain.slice(startIdx + 1)
+
+    for (const fallbackProvider of fallbacks) {
       try {
-        console.log('Falling back to LTX...')
-        const fallback = await generateVideoWithProvider('ltx', prompt, imageUrl)
+        console.log(`Trying fallback: ${fallbackProvider}...`)
+        const fallback = await generateVideoWithProvider(fallbackProvider, prompt, imageUrl)
         return NextResponse.json({
           success: true,
           videoUrl: fallback.url,
-          model: fallback.model + ' (fallback)',
-          provider: 'ltx',
+          model: fallback.model + ` (fallback from ${provider})`,
+          provider: fallbackProvider,
           fallbackFrom: provider,
         })
       } catch (fallbackError) {
-        console.error('Fallback also failed:', fallbackError)
+        console.error(`Fallback ${fallbackProvider} also failed:`, fallbackError)
       }
     }
 
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Video generation failed' },
+      { error: error instanceof Error ? error.message : 'Video generation failed — all models unavailable' },
       { status: 500 }
     )
   }
