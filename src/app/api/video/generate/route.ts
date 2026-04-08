@@ -89,24 +89,58 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    let result
-
     const genParams = {
       negativePrompt,
       duration: duration ? parseInt(duration) : undefined,
       aspectRatio,
     }
 
+    // For Kling and Seedance (slow models), submit to Fal queue and return request_id
+    // Frontend will poll for the result
+    if (provider === 'kling' || provider === 'seedance') {
+      const { fal } = await import('@fal-ai/client')
+      fal.config({ credentials: process.env.FAL_KEY })
+
+      const modelIds: Record<string, { text: string; image: string }> = {
+        kling: { text: 'fal-ai/kling-video/v1/standard/text-to-video', image: 'fal-ai/kling-video/v1/standard/image-to-video' },
+        seedance: { text: 'fal-ai/seedance-video-01-lora', image: 'fal-ai/seedance-video-01-lora' },
+      }
+      const modelId = imageUrl ? modelIds[provider].image : modelIds[provider].text
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const input: Record<string, any> = { prompt }
+      if (genParams.negativePrompt) input.negative_prompt = genParams.negativePrompt
+      if (imageUrl) input.image_url = imageUrl
+      if (provider === 'kling') {
+        input.duration = String(genParams.duration || 10)
+        input.aspect_ratio = genParams.aspectRatio || '16:9'
+      }
+
+      const { request_id } = await fal.queue.submit(modelId, { input })
+
+      return NextResponse.json({
+        success: true,
+        async: true,
+        requestId: request_id,
+        provider,
+        model: provider === 'kling' ? 'Kling (Realistic, ~$0.20)' : 'Seedance 2.0 (Cinematic, ~$0.80)',
+        statusUrl: `/api/video/status?requestId=${request_id}&provider=${provider}`,
+      })
+    }
+
+    // For fast models (minimax, ltx), generate synchronously
+    let result
     if (provider === 'auto') {
+      // Auto-routing for fast models only to avoid timeout
       result = await smartGenerateVideo({
         prompt,
         imageUrl,
-        preferredProvider: 'auto',
+        preferredProvider: 'minimax',
         ...genParams,
       })
     } else {
       result = await generateVideoWithProvider(
-        provider as 'seedance' | 'kling' | 'minimax' | 'ltx',
+        provider as 'minimax' | 'ltx',
         prompt,
         imageUrl,
         genParams,
@@ -115,37 +149,30 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      async: false,
       videoUrl: result.url,
       model: result.model,
       provider: result.provider,
-      routingScore: 'routingScore' in result ? result.routingScore : undefined,
     })
   } catch (error) {
     console.error(`Video generation error (provider: ${provider}):`, error)
 
-    // Cascade fallback: try the next best model down the quality chain
-    const fallbackChain: ('seedance' | 'kling' | 'minimax' | 'ltx')[] = ['seedance', 'kling', 'minimax', 'ltx']
-    const startIdx = fallbackChain.indexOf(provider as typeof fallbackChain[number])
-    const fallbacks = fallbackChain.slice(startIdx + 1)
-
-    for (const fallbackProvider of fallbacks) {
-      try {
-        console.log(`Trying fallback: ${fallbackProvider}...`)
-        const fallback = await generateVideoWithProvider(fallbackProvider, prompt, imageUrl)
-        return NextResponse.json({
-          success: true,
-          videoUrl: fallback.url,
-          model: fallback.model + ` (fallback from ${provider})`,
-          provider: fallbackProvider,
-          fallbackFrom: provider,
-        })
-      } catch (fallbackError) {
-        console.error(`Fallback ${fallbackProvider} also failed:`, fallbackError)
-      }
+    // Fallback to LTX
+    try {
+      const fallback = await generateVideoWithProvider('ltx', prompt, imageUrl)
+      return NextResponse.json({
+        success: true,
+        async: false,
+        videoUrl: fallback.url,
+        model: fallback.model + ' (fallback)',
+        provider: 'ltx',
+      })
+    } catch (fallbackError) {
+      console.error('LTX fallback also failed:', fallbackError)
     }
 
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Video generation failed — all models unavailable' },
+      { error: error instanceof Error ? error.message : 'Video generation failed' },
       { status: 500 }
     )
   }

@@ -160,14 +160,65 @@ export default function CreatorPage() {
 
         if (res.ok) {
           const data = await res.json()
-          setMessages(prev => {
-            const updated = [...prev]
-            updated[updated.length - 1] = {
-              ...updated[updated.length - 1],
-              generatedMedia: { type: 'video', url: data.videoUrl, model: data.model },
-            }
-            return updated
-          })
+
+          if (data.async && data.statusUrl) {
+            // Async generation — poll for result
+            setMessages(prev => [...prev, {
+              role: 'assistant',
+              content: `Creating your video with ${data.model}... This takes 2-5 minutes. I'll update when it's ready.`,
+            }])
+
+            // Poll every 10 seconds
+            const pollInterval = setInterval(async () => {
+              try {
+                const statusRes = await fetch(data.statusUrl)
+                if (!statusRes.ok) return
+                const status = await statusRes.json()
+
+                if (status.status === 'completed' && status.videoUrl) {
+                  clearInterval(pollInterval)
+                  setGenerating(false)
+                  setGeneratingType(null)
+                  setMessages(prev => {
+                    const updated = [...prev]
+                    // Find the last assistant message and add media to it
+                    for (let i = updated.length - 1; i >= 0; i--) {
+                      if (updated[i].role === 'assistant' && !updated[i].generatedMedia) {
+                        updated[i] = { ...updated[i], generatedMedia: { type: 'video', url: status.videoUrl, model: data.model } }
+                        break
+                      }
+                    }
+                    return updated
+                  })
+                } else if (status.status === 'failed') {
+                  clearInterval(pollInterval)
+                  setGenerating(false)
+                  setGeneratingType(null)
+                  setMessages(prev => [...prev, { role: 'assistant', content: 'Video generation failed. Try a different style or model.' }])
+                }
+                // else still processing — keep polling
+              } catch { /* ignore poll errors */ }
+            }, 10000)
+
+            // Safety timeout — stop polling after 8 minutes
+            setTimeout(() => {
+              clearInterval(pollInterval)
+              setGenerating(false)
+              setGeneratingType(null)
+            }, 480000)
+
+            return // Don't clear generating state yet
+          } else {
+            // Sync result
+            setMessages(prev => {
+              const updated = [...prev]
+              updated[updated.length - 1] = {
+                ...updated[updated.length - 1],
+                generatedMedia: { type: 'video', url: data.videoUrl, model: data.model },
+              }
+              return updated
+            })
+          }
         } else {
           const err = await res.json()
           setMessages(prev => [...prev, { role: 'assistant', content: `Generation failed: ${err.error}` }])
