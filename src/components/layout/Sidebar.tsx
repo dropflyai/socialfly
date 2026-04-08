@@ -33,8 +33,9 @@ interface NavItem {
 
 const mainNavItems: NavItem[] = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { title: 'AI Creator', href: '/create', icon: Sparkles },
   { title: 'Brand', href: '/brand', icon: Palette },
-  { title: 'Content', href: '/content', icon: Sparkles },
+  { title: 'Content', href: '/content', icon: FolderOpen },
   { title: 'Media', href: '/media', icon: FolderOpen },
   { title: 'Schedule', href: '/schedule', icon: Calendar },
   { title: 'Automations', href: '/automations', icon: Zap, minTier: 'pro' },

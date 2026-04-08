@@ -35,7 +35,7 @@ interface VideoProviderCapabilities {
   audioSync: boolean          // Supports audio-driven generation?
 }
 
-const PROVIDER_CAPABILITIES: Record<'seedance' | 'minimax' | 'ltx', VideoProviderCapabilities> = {
+const PROVIDER_CAPABILITIES: Record<'seedance' | 'kling' | 'minimax' | 'ltx', VideoProviderCapabilities> = {
   seedance: {
     cinematicQuality: 10,      // #1 on video leaderboard
     motionRealism: 10,         // Best-in-class motion
@@ -46,6 +46,17 @@ const PROVIDER_CAPABILITIES: Record<'seedance' | 'minimax' | 'ltx', VideoProvide
     costEfficiency: 4,         // Premium pricing (~$0.80/video)
     characterConsistency: 9,   // Excellent subject consistency
     audioSync: true,           // Audio-driven generation
+  },
+  kling: {
+    cinematicQuality: 8,       // Very high quality, close to Seedance
+    motionRealism: 9,          // Excellent realistic human motion
+    textFollowing: 8,          // Good prompt adherence
+    imageToVideo: true,        // Full image-to-video support
+    maxDuration: 10,           // Up to 10 seconds
+    speed: 6,                  // ~1-2 minutes per video
+    costEfficiency: 7,         // Mid-range (~$0.10-0.40/video)
+    characterConsistency: 8,   // Strong subject consistency
+    audioSync: false,
   },
   minimax: {
     cinematicQuality: 7,
@@ -77,6 +88,10 @@ const MODEL_IDS = {
     textToVideo: 'fal-ai/seedance-video-01-lora',
     imageToVideo: 'fal-ai/seedance-video-01-lora',
   },
+  kling: {
+    textToVideo: 'fal-ai/kling-video/v1/standard/text-to-video',
+    imageToVideo: 'fal-ai/kling-video/v1/standard/image-to-video',
+  },
   minimax: {
     textToVideo: 'fal-ai/minimax-video',
     imageToVideo: 'fal-ai/minimax-video/image-to-video',
@@ -89,6 +104,7 @@ const MODEL_IDS = {
 
 const MODEL_LABELS: Record<string, string> = {
   seedance: 'Seedance 2.0 (Cinematic, ~$0.80)',
+  kling: 'Kling (Realistic, ~$0.20)',
   minimax: 'Minimax Video (Quality, ~$0.50)',
   ltx: 'LTX Video (Fast, ~$0.02)',
 }
@@ -165,9 +181,24 @@ export function scoreVideoProviders(request: VideoRouteRequest): VideoProviderSc
       if (name === 'seedance') {
         score += 20
         reasons.push('Cinematic/marketing keywords detected, Seedance best choice (+20)')
+      } else if (name === 'kling') {
+        score += 12
+        reasons.push('Cinematic keywords, Kling strong option (+12)')
       } else if (name === 'minimax') {
         score += 5
         reasons.push('Cinematic keywords, Minimax decent (+5)')
+      }
+    }
+
+    // Realistic human/people keywords — Kling excels here
+    const realisticKeywords = ['person', 'people', 'human', 'face', 'portrait', 'talking', 'walking', 'dancing', 'lifestyle', 'model', 'customer', 'employee']
+    if (realisticKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
+      if (name === 'kling') {
+        score += 18
+        reasons.push('Realistic human motion detected, Kling excels (+18)')
+      } else if (name === 'seedance') {
+        score += 10
+        reasons.push('Human content, Seedance also strong (+10)')
       }
     }
 
@@ -186,10 +217,19 @@ export function scoreVideoProviders(request: VideoRouteRequest): VideoProviderSc
       if (name === 'seedance') {
         score += 10
         reasons.push('Product showcase keywords, Seedance handles well (+10)')
+      } else if (name === 'kling') {
+        score += 10
+        reasons.push('Product demo, Kling realistic and cost-effective (+10)')
       } else if (name === 'minimax') {
         score += 8
         reasons.push('Product keywords, Minimax good option (+8)')
       }
+    }
+
+    // Image-to-video: Kling is also great at this
+    if (request.imageUrl && name === 'kling') {
+      score += 10
+      reasons.push('Kling strong at image-to-video (+10)')
     }
 
     scores.push({ provider: name as VideoProvider, score: Math.max(0, score), reasons })
@@ -202,27 +242,27 @@ export function scoreVideoProviders(request: VideoRouteRequest): VideoProviderSc
 /**
  * Pick the best video provider for a request.
  */
-export function pickVideoProvider(request: VideoRouteRequest): 'seedance' | 'minimax' | 'ltx' {
+export function pickVideoProvider(request: VideoRouteRequest): 'seedance' | 'kling' | 'minimax' | 'ltx' {
   const config = getConfig()
 
   // If user explicitly chose a provider
   if (request.preferredProvider && request.preferredProvider !== 'auto') {
-    return request.preferredProvider as 'seedance' | 'minimax' | 'ltx'
+    return request.preferredProvider as 'seedance' | 'kling' | 'minimax' | 'ltx'
   }
 
   // If config has a non-auto default
   if (config.defaultVideoProvider && config.defaultVideoProvider !== 'auto') {
-    return config.defaultVideoProvider as 'seedance' | 'minimax' | 'ltx'
+    return config.defaultVideoProvider as 'seedance' | 'kling' | 'minimax' | 'ltx'
   }
 
   // Smart routing
   const scores = scoreVideoProviders(request)
 
   if (scores.length === 0) {
-    return 'seedance' // Default to best quality
+    return 'kling' // Default to best value (quality + cost)
   }
 
-  return scores[0].provider as 'seedance' | 'minimax' | 'ltx'
+  return scores[0].provider as 'seedance' | 'kling' | 'minimax' | 'ltx'
 }
 
 // ============================================================================
@@ -308,6 +348,47 @@ async function generateWithMinimax(
     prompt,
     provider: 'minimax',
     model: MODEL_LABELS.minimax,
+  }
+}
+
+/**
+ * Generate video via Kling (FAL.ai hosted).
+ */
+async function generateWithKling(
+  prompt: string,
+  imageUrl?: string,
+): Promise<GeneratedVideo> {
+  const config = getConfig()
+  fal.config({ credentials: config.falApiKey })
+
+  const modelId = imageUrl
+    ? MODEL_IDS.kling.imageToVideo
+    : MODEL_IDS.kling.textToVideo
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const input: Record<string, any> = {
+    prompt,
+    duration: '5',
+    aspect_ratio: '16:9',
+  }
+
+  if (imageUrl) {
+    input.image_url = imageUrl
+  }
+
+  const result = await fal.subscribe(modelId, { input })
+
+  const videoUrl = extractVideoUrl(result.data)
+  if (!videoUrl) {
+    console.error('Kling response shape:', JSON.stringify(result.data).slice(0, 500))
+    throw new Error('No video URL in Kling response')
+  }
+
+  return {
+    url: videoUrl,
+    prompt,
+    provider: 'kling',
+    model: MODEL_LABELS.kling,
   }
 }
 
@@ -408,6 +489,9 @@ export async function smartGenerateVideo(
     case 'seedance':
       result = await generateWithSeedance(prompt, imageUrl)
       break
+    case 'kling':
+      result = await generateWithKling(prompt, imageUrl)
+      break
     case 'minimax':
       result = await generateWithMinimax(prompt, imageUrl)
       break
@@ -415,7 +499,7 @@ export async function smartGenerateVideo(
       result = await generateWithLtx(prompt, imageUrl)
       break
     default:
-      result = await generateWithSeedance(prompt, imageUrl)
+      result = await generateWithKling(prompt, imageUrl)
   }
 
   return {
@@ -428,19 +512,21 @@ export async function smartGenerateVideo(
  * Generate video with a specific provider (no routing).
  */
 export async function generateVideoWithProvider(
-  provider: 'seedance' | 'minimax' | 'ltx',
+  provider: 'seedance' | 'kling' | 'minimax' | 'ltx',
   prompt: string,
   imageUrl?: string,
 ): Promise<GeneratedVideo> {
   switch (provider) {
     case 'seedance':
       return generateWithSeedance(prompt, imageUrl)
+    case 'kling':
+      return generateWithKling(prompt, imageUrl)
     case 'minimax':
       return generateWithMinimax(prompt, imageUrl)
     case 'ltx':
       return generateWithLtx(prompt, imageUrl)
     default:
-      return generateWithSeedance(prompt, imageUrl)
+      return generateWithKling(prompt, imageUrl)
   }
 }
 
@@ -473,6 +559,15 @@ export function getAvailableVideoModels() {
       speed: '2-4 minutes',
       bestFor: 'Marketing videos, product showcases, cinematic content',
       capabilities: PROVIDER_CAPABILITIES.seedance,
+    },
+    {
+      id: 'kling',
+      name: 'Kling',
+      description: 'Excellent realistic human motion and image-to-video. Great balance of quality and cost.',
+      cost: '~$0.20/video',
+      speed: '1-2 minutes',
+      bestFor: 'Realistic people, product demos, social media reels, image-to-video',
+      capabilities: PROVIDER_CAPABILITIES.kling,
     },
     {
       id: 'minimax',

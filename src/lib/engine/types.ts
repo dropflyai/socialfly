@@ -182,7 +182,7 @@ export interface PlatformAnalytics {
 }
 
 export type ImageProvider = 'auto' | 'fal' | 'nanobanana' | 'dalle' | 'stability'
-export type VideoProvider = 'auto' | 'seedance' | 'ltx' | 'minimax'
+export type VideoProvider = 'auto' | 'seedance' | 'kling' | 'ltx' | 'minimax'
 export type AudioProvider = 'elevenlabs'
 export type AudioStyle = 'narration' | 'voiceover' | 'podcast_intro' | 'ad_read'
 export type AudioFormat = 'mp3_44100_128' | 'mp3_22050_32' | 'pcm_16000' | 'pcm_44100'

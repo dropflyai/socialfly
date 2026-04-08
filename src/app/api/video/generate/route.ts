@@ -13,13 +13,14 @@ import type { VideoProvider } from '@/lib/engine/types'
 // Hobby: max 60s, Pro: max 300s
 export const maxDuration = 300
 
-type VideoModel = 'fast' | 'quality' | 'seedance' | 'auto'
+type VideoModel = 'fast' | 'quality' | 'seedance' | 'kling' | 'auto'
 
 // Map legacy model names to new provider names
 const MODEL_TO_PROVIDER: Record<VideoModel, VideoProvider> = {
   fast: 'ltx',
-  quality: 'minimax',
+  quality: 'kling',
   seedance: 'seedance',
+  kling: 'kling',
   auto: 'auto',
 }
 
