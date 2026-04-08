@@ -68,6 +68,18 @@ export default function CreatorPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Post flow state
+  const [showPostFlow, setShowPostFlow] = useState(false)
+  const [postMediaUrl, setPostMediaUrl] = useState<string | null>(null)
+  const [postMediaType, setPostMediaType] = useState<'image' | 'video'>('image')
+  const [postCaption, setPostCaption] = useState('')
+  const [postPlatforms, setPostPlatforms] = useState<string[]>(['instagram'])
+  const [postTiming, setPostTiming] = useState<'now' | 'schedule'>('now')
+  const [postScheduleDate, setPostScheduleDate] = useState('')
+  const [postScheduleTime, setPostScheduleTime] = useState('')
+  const [generatingCaption, setGeneratingCaption] = useState(false)
+  const [posting, setPosting] = useState(false)
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
@@ -383,22 +395,31 @@ export default function CreatorPage() {
                   )}
 
                   {/* Actions */}
-                  <div className="p-3 flex gap-2 border-t border-primary/10">
-                    <Button
-                      size="sm"
-                      onClick={() => handleGenerate(msg.action)}
-                      disabled={generating}
-                      className="flex-1 gap-1"
-                    >
-                      {generating && generatingType === msg.action.action ? (
-                        <><Loader2 className="h-3 w-3 animate-spin" />Creating...</>
-                      ) : (
-                        <><Sparkles className="h-3 w-3" />Create {msg.action.action === 'generate_video' ? 'Video' : 'Image'}</>
-                      )}
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => sendMessage('I want to change something —')}>
-                      Adjust
-                    </Button>
+                  <div className="p-3 space-y-2 border-t border-primary/10">
+                    {/* Credit cost */}
+                    <div className="text-[10px] text-muted-foreground text-center">
+                      {msg.action.action === 'generate_video'
+                        ? `This will use ${msg.action.model === 'seedance' ? 50 : msg.action.model === 'ltx' || msg.action.model === 'fast' ? 25 : 50} credits`
+                        : 'This will use 5 credits'
+                      }
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => handleGenerate(msg.action)}
+                        disabled={generating}
+                        className="flex-1 gap-1"
+                      >
+                        {generating && generatingType === msg.action.action ? (
+                          <><Loader2 className="h-3 w-3 animate-spin" />Creating...</>
+                        ) : (
+                          <><Sparkles className="h-3 w-3" />Create {msg.action.action === 'generate_video' ? 'Video' : 'Image'}</>
+                        )}
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => sendMessage('I want to change something —')}>
+                        Adjust
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -443,34 +464,22 @@ export default function CreatorPage() {
                           <Download className="h-3 w-3" />
                         </a>
                       </Button>
-                      {/* Remix */}
-                      <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs" onClick={() => sendMessage("Make a different variation of this — same concept, fresh take")}>
+                      {/* Try Again — regenerate same prompt */}
+                      <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs" onClick={() => {
+                        const lastAction = messages.filter(m => m.action?.prompt).pop()?.action
+                        if (lastAction) handleGenerate(lastAction)
+                      }}>
                         <RefreshCw className="h-3 w-3" />
                       </Button>
                     </div>
-                    {/* Post / Schedule */}
-                    <Button size="sm" className="w-full h-8 gap-1 text-xs" onClick={async () => {
-                      try {
-                        const res = await fetch('/api/posts/publish', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            text: messages.filter(m => m.action?.description).pop()?.action?.description || 'AI generated content',
-                            platforms: ['instagram'],
-                            mediaUrls: [msg.generatedMedia!.url],
-                            mediaType: msg.generatedMedia!.type === 'video' ? 'video' : 'image',
-                            scheduleFor: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-                          }),
-                        })
-                        if (res.ok) {
-                          setMessages(prev => [...prev, { role: 'assistant', content: 'Scheduled to post in 5 minutes! Check your Schedule page to see it.' }])
-                        } else {
-                          const err = await res.json()
-                          setMessages(prev => [...prev, { role: 'assistant', content: `Couldn't schedule: ${err.error}. Try saving to your library and posting from the Schedule page.` }])
-                        }
-                      } catch { setMessages(prev => [...prev, { role: 'assistant', content: 'Something went wrong scheduling. Try saving to library first.' }]) }
+                    {/* Post This */}
+                    <Button size="sm" className="w-full h-8 gap-1 text-xs" onClick={() => {
+                      setPostMediaUrl(msg.generatedMedia!.url)
+                      setPostMediaType(msg.generatedMedia!.type)
+                      setPostCaption('')
+                      setShowPostFlow(true)
                     }}>
-                      <Send className="h-3 w-3" />Schedule Post (5 min)
+                      <Send className="h-3 w-3" />Post This
                     </Button>
                   </div>
                 </div>
@@ -550,6 +559,194 @@ export default function CreatorPage() {
           </Button>
         </div>
       </div>
+      {/* Post Flow Modal */}
+      {showPostFlow && postMediaUrl && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-background rounded-xl border shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="font-semibold">Post to Social Media</h3>
+              <button onClick={() => setShowPostFlow(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {/* Media preview */}
+              <div className="rounded-lg overflow-hidden border max-h-48">
+                {postMediaType === 'video' ? (
+                  <video src={postMediaUrl} className="w-full max-h-48 object-contain" controls />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={postMediaUrl} alt="" className="w-full max-h-48 object-contain" />
+                )}
+              </div>
+
+              {/* Caption */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">Caption</label>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 gap-1 text-xs"
+                    disabled={generatingCaption}
+                    onClick={async () => {
+                      setGeneratingCaption(true)
+                      try {
+                        const brief = messages.find(m => m.action?.brief)?.action?.brief
+                        const res = await fetch('/api/caption', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            context: brief?.subject || 'AI generated content for social media',
+                            platforms: postPlatforms,
+                            tone: brief?.mood || 'professional',
+                            includeCta: true,
+                          }),
+                        })
+                        if (res.ok) {
+                          const data = await res.json()
+                          const firstPlatform = postPlatforms[0] || 'instagram'
+                          const caption = data.captions?.[firstPlatform]
+                          if (caption) {
+                            const hashtags = caption.hashtags?.join(' ') || ''
+                            setPostCaption(`${caption.text}${hashtags ? '\n\n' + hashtags : ''}`)
+                          }
+                        }
+                      } catch { /* ignore */ }
+                      setGeneratingCaption(false)
+                    }}
+                  >
+                    {generatingCaption ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                    AI Write Caption
+                  </Button>
+                </div>
+                <textarea
+                  value={postCaption}
+                  onChange={e => setPostCaption(e.target.value)}
+                  placeholder="Write a caption or let AI generate one..."
+                  className="w-full min-h-24 p-3 rounded-lg border bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+                />
+              </div>
+
+              {/* Platforms */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Post to</label>
+                <div className="flex flex-wrap gap-2">
+                  {['instagram', 'facebook', 'linkedin', 'tiktok'].map(platform => (
+                    <button
+                      key={platform}
+                      onClick={() => setPostPlatforms(prev =>
+                        prev.includes(platform) ? prev.filter(p => p !== platform) : [...prev, platform]
+                      )}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium capitalize transition-all ${
+                        postPlatforms.includes(platform)
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                      }`}
+                    >
+                      {platform}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Timing */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">When</label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setPostTiming('now')}
+                    className={`flex-1 p-2.5 rounded-lg border text-sm transition-all ${
+                      postTiming === 'now' ? 'ring-2 ring-primary bg-primary/5' : 'hover:border-primary/30'
+                    }`}
+                  >
+                    Post now
+                  </button>
+                  <button
+                    onClick={() => setPostTiming('schedule')}
+                    className={`flex-1 p-2.5 rounded-lg border text-sm transition-all ${
+                      postTiming === 'schedule' ? 'ring-2 ring-primary bg-primary/5' : 'hover:border-primary/30'
+                    }`}
+                  >
+                    Schedule for later
+                  </button>
+                </div>
+                {postTiming === 'schedule' && (
+                  <div className="flex gap-2">
+                    <input
+                      type="date"
+                      value={postScheduleDate}
+                      onChange={e => setPostScheduleDate(e.target.value)}
+                      className="flex-1 px-3 py-2 rounded-lg border bg-background text-sm"
+                    />
+                    <input
+                      type="time"
+                      value={postScheduleTime}
+                      onChange={e => setPostScheduleTime(e.target.value)}
+                      className="flex-1 px-3 py-2 rounded-lg border bg-background text-sm"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="p-4 border-t flex gap-2">
+              <Button variant="outline" onClick={() => setShowPostFlow(false)} className="flex-1">
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 gap-1"
+                disabled={posting || !postPlatforms.length || !postCaption.trim()}
+                onClick={async () => {
+                  setPosting(true)
+                  try {
+                    let scheduleFor: string
+                    if (postTiming === 'schedule' && postScheduleDate && postScheduleTime) {
+                      scheduleFor = new Date(`${postScheduleDate}T${postScheduleTime}`).toISOString()
+                    } else {
+                      scheduleFor = new Date(Date.now() + 2 * 60 * 1000).toISOString()
+                    }
+
+                    const res = await fetch('/api/posts/publish', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        text: postCaption,
+                        platforms: postPlatforms,
+                        mediaUrls: [postMediaUrl],
+                        mediaType: postMediaType,
+                        scheduleFor,
+                      }),
+                    })
+
+                    if (res.ok) {
+                      setShowPostFlow(false)
+                      const timeMsg = postTiming === 'now' ? 'in about 2 minutes' : `on ${postScheduleDate} at ${postScheduleTime}`
+                      setMessages(prev => [...prev, {
+                        role: 'assistant',
+                        content: `Scheduled to ${postPlatforms.join(', ')} ${timeMsg}! Check your Schedule page to track it.`,
+                      }])
+                    } else {
+                      const err = await res.json()
+                      setMessages(prev => [...prev, { role: 'assistant', content: `Couldn't schedule: ${err.error}` }])
+                      setShowPostFlow(false)
+                    }
+                  } catch {
+                    setMessages(prev => [...prev, { role: 'assistant', content: 'Something went wrong. Try again.' }])
+                    setShowPostFlow(false)
+                  }
+                  setPosting(false)
+                }}
+              >
+                {posting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                {postTiming === 'now' ? 'Post Now' : 'Schedule'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
