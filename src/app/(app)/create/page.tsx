@@ -348,7 +348,7 @@ export default function CreatorPage() {
           <div className="flex justify-start">
             <div className="bg-primary/5 border border-primary/20 rounded-2xl px-4 py-3 flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin text-primary" />
-              <span className="text-sm text-primary">Creating your {generatingType === 'generate_video' ? 'video' : 'image'}... this may take 30-60 seconds</span>
+              <span className="text-sm text-primary">Creating your {generatingType === 'generate_video' ? 'video' : 'image'}... {generatingType === 'generate_video' ? 'this may take 2-5 minutes for high quality' : 'this may take 15-30 seconds'}</span>
             </div>
           </div>
         )}
