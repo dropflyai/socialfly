@@ -22,6 +22,18 @@ interface ChatMessage {
     duration?: string
     mediaId?: string
     suggestion?: string
+    description?: string
+    brief?: {
+      subject?: string
+      mood?: string
+      style?: string
+      cameraAngle?: string
+      cameraMovement?: string
+      lighting?: string
+      platform?: string
+      purpose?: string
+      [key: string]: unknown
+    }
   } | null
   generatedMedia?: {
     type: 'video' | 'image'
@@ -262,37 +274,69 @@ export default function CreatorPage() {
                 <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
               </div>
 
-              {/* Action button — generate */}
+              {/* Creative brief + generate button */}
               {msg.action && !msg.generatedMedia && (
-                <div className="mt-2 p-3 rounded-xl border bg-primary/5 space-y-2">
-                  <div className="flex items-center gap-2">
-                    {msg.action.action === 'generate_video' ? (
-                      <Video className="h-4 w-4 text-primary" />
-                    ) : (
-                      <ImageIcon className="h-4 w-4 text-primary" />
-                    )}
-                    <span className="text-xs font-medium">
-                      Ready to generate {msg.action.action === 'generate_video' ? 'video' : 'image'}
-                      {msg.action.model && <Badge variant="secondary" className="ml-1 text-[10px]">{msg.action.model}</Badge>}
-                    </span>
+                <div className="mt-2 rounded-xl border bg-primary/5 overflow-hidden">
+                  {/* Brief header */}
+                  <div className="p-3 flex items-center justify-between border-b border-primary/10">
+                    <div className="flex items-center gap-2">
+                      {msg.action.action === 'generate_video' ? (
+                        <Video className="h-4 w-4 text-primary" />
+                      ) : (
+                        <ImageIcon className="h-4 w-4 text-primary" />
+                      )}
+                      <span className="text-xs font-medium">
+                        {msg.action.description || `Ready to create ${msg.action.action === 'generate_video' ? 'video' : 'image'}`}
+                      </span>
+                    </div>
+                    <Badge variant="secondary" className="text-[10px] capitalize">{msg.action.model || 'auto'}</Badge>
                   </div>
-                  {msg.action.prompt && (
-                    <p className="text-xs text-muted-foreground italic line-clamp-2">&quot;{msg.action.prompt}&quot;</p>
+
+                  {/* Visual brief details */}
+                  {msg.action.brief && (
+                    <div className="px-3 py-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+                      {msg.action.brief.mood && (
+                        <div><span className="text-muted-foreground">Mood:</span> <span className="font-medium">{msg.action.brief.mood}</span></div>
+                      )}
+                      {msg.action.brief.cameraAngle && (
+                        <div><span className="text-muted-foreground">Camera:</span> <span className="font-medium">{msg.action.brief.cameraAngle}</span></div>
+                      )}
+                      {msg.action.brief.cameraMovement && (
+                        <div><span className="text-muted-foreground">Movement:</span> <span className="font-medium">{msg.action.brief.cameraMovement}</span></div>
+                      )}
+                      {msg.action.brief.lighting && (
+                        <div><span className="text-muted-foreground">Lighting:</span> <span className="font-medium">{msg.action.brief.lighting}</span></div>
+                      )}
+                      {msg.action.brief.platform && (
+                        <div><span className="text-muted-foreground">Platform:</span> <span className="font-medium capitalize">{msg.action.brief.platform}</span></div>
+                      )}
+                      {msg.action.aspectRatio && (
+                        <div><span className="text-muted-foreground">Format:</span> <span className="font-medium">{msg.action.aspectRatio}</span></div>
+                      )}
+                      {msg.action.duration && msg.action.action === 'generate_video' && (
+                        <div><span className="text-muted-foreground">Duration:</span> <span className="font-medium">{msg.action.duration}s</span></div>
+                      )}
+                      {msg.action.brief.style && (
+                        <div><span className="text-muted-foreground">Style:</span> <span className="font-medium">{msg.action.brief.style}</span></div>
+                      )}
+                    </div>
                   )}
-                  <div className="flex gap-2">
+
+                  {/* Actions */}
+                  <div className="p-3 flex gap-2 border-t border-primary/10">
                     <Button
                       size="sm"
                       onClick={() => handleGenerate(msg.action)}
                       disabled={generating}
-                      className="gap-1"
+                      className="flex-1 gap-1"
                     >
                       {generating && generatingType === msg.action.action ? (
-                        <><Loader2 className="h-3 w-3 animate-spin" />Generating...</>
+                        <><Loader2 className="h-3 w-3 animate-spin" />Creating...</>
                       ) : (
-                        <><Sparkles className="h-3 w-3" />Generate</>
+                        <><Sparkles className="h-3 w-3" />Create {msg.action.action === 'generate_video' ? 'Video' : 'Image'}</>
                       )}
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => sendMessage('Let me adjust — ')}>
+                    <Button size="sm" variant="ghost" onClick={() => sendMessage('I want to change something —')}>
                       Adjust
                     </Button>
                   </div>

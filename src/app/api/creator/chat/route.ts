@@ -3,6 +3,12 @@ import { createServerSupabaseClient, createServiceClient } from '@/lib/supabase-
 import Anthropic from '@anthropic-ai/sdk'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 import { getAvailableVideoModels } from '@/lib/engine/video-router'
+import {
+  buildPromptFromBrief,
+  getAspectRatioForPlatform,
+  recommendModel,
+  type CreativeBrief,
+} from '@/lib/engine/prompt-engineer'
 
 export const maxDuration = 60
 
@@ -13,7 +19,7 @@ interface ChatMessage {
   content: string
 }
 
-// POST /api/creator/chat — conversational AI creator for videos and images
+// POST /api/creator/chat — two-stage conversational AI creator
 export async function POST(request: NextRequest) {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -36,6 +42,7 @@ export async function POST(request: NextRequest) {
   // Load brand context
   const serviceClient = createServiceClient()
   let brandContext = ''
+  let brandName = ''
   const { data: brand } = await serviceClient
     .from('brand_profiles')
     .select('name, voice_tone, voice_description, target_audience, content_pillars')
@@ -44,10 +51,11 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (brand) {
+    brandName = brand.name
     brandContext = `User's brand: ${brand.name}. Tone: ${brand.voice_tone}. Audience: ${brand.target_audience || 'general'}. Pillars: ${(brand.content_pillars || []).join(', ')}.`
   }
 
-  // Load available media for context
+  // Load available media
   const { data: userMedia } = await serviceClient
     .from('brand_assets')
     .select('id, title, file_url, asset_type')
@@ -55,76 +63,78 @@ export async function POST(request: NextRequest) {
     .order('created_at', { ascending: false })
     .limit(20)
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mediaLibraryInfo = userMedia?.length
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ? `User has ${userMedia.length} media files in their library including: ${userMedia.slice(0, 5).map((m: any) => `"${m.title || 'untitled'}" (${m.asset_type})`).join(', ')}.`
-    : 'User has no media uploaded yet.'
+    ? `User has ${userMedia.length} media files. Recent: ${userMedia.slice(0, 3).map((m: any) => `"${m.title || 'untitled'}" (${m.asset_type})`).join(', ')}.`
+    : ''
 
   const videoModels = getAvailableVideoModels()
-  const modelInfo = videoModels.map(m => `- ${m.name}: ${m.description} Best for: ${m.bestFor}. Cost: ${m.cost}. Speed: ${m.speed}`).join('\n')
 
-  const systemPrompt = `You are the SocialFly AI Creator — a friendly, expert assistant that helps users create stunning videos and images for social media.
+  // ============================================================
+  // STAGE 1: Creative Director — conversation + brief extraction
+  // ============================================================
+
+  const systemPrompt = `You are the SocialFly AI Creative Director. You help users create stunning videos and images for social media through natural conversation.
 
 ${brandContext}
 ${mediaLibraryInfo}
 ${mediaContext ? `User is working with: ${mediaContext.type} "${mediaContext.name || 'uploaded file'}" (${mediaContext.url})` : ''}
 
-AVAILABLE VIDEO MODELS:
-${modelInfo}
+YOUR JOB:
+1. Chat naturally — understand what they want to create
+2. Ask smart questions (1-2 at a time, not 5):
+   - What should it show? (subject)
+   - What mood/vibe? (mood)
+   - What platform? (affects aspect ratio)
+   - Any specific style? (cinematic, minimal, etc.)
+3. When you have enough info, output a CREATIVE BRIEF as JSON
 
-YOUR ROLE:
-1. Help users describe what they want in simple terms — they don't need to know technical prompts
-2. Ask smart questions to understand their vision (what, who, mood, platform, purpose)
-3. When you have enough info, generate a READY prompt by outputting a JSON action block
-4. Let them refine with natural language ("make it warmer", "add more energy", "try vertical")
-5. Help them repurpose existing media — turn images into videos, remix old content
+CONVERSATION RULES:
+- Be friendly and brief — 1-3 sentences per message
+- Don't overwhelm with options
+- Make suggestions based on their brand and what works on social media
+- If they mention their media library, suggest using it
+- If they're vague, make a creative suggestion and ask if they like it
 
-RULES:
-- Be conversational, not robotic. Use short messages.
-- Don't overwhelm — ask 1-2 questions at a time, not 5
-- When the user gives enough detail, propose a specific creative direction
-- Always show what you'd create before generating (let them approve or adjust)
-- If they upload or reference media, suggest ways to use it (image-to-video, edit, remix)
-- Pick the best video model automatically based on what they describe, but let them override
-- For social media, consider the platform (vertical for Reels/TikTok, square for feed, landscape for YouTube)
+WHEN READY TO GENERATE:
+Output a creative brief JSON block. This is NOT the final prompt — our prompt engineer will optimize it for the specific model. Just capture the creative direction.
 
-PROMPT ENGINEERING FOR VIDEO:
-When writing video prompts, follow these rules:
-- Be highly descriptive: describe the scene, camera angle, lighting, mood, movement
-- Always include: "high quality, cinematic, no text overlays, no watermarks"
-- Describe camera movement: "slow pan", "dolly zoom", "tracking shot", "static wide shot"
-- Describe the subject's actions: "person walking confidently", not just "person"
-- Include lighting: "golden hour lighting", "soft studio light", "dramatic shadows"
-- NEVER include non-English text or random text in prompts
-- Default to 10 seconds duration and 16:9 aspect ratio unless user specifies otherwise
-- For Instagram Reels/TikTok, use 9:16 vertical
-
-MODEL SELECTION:
-- Use "kling" as default — best balance of quality and cost
-- Use "seedance" for premium cinematic content
-- Use "auto" to let the router decide
-- Only use "fast" (LTX) if user asks for a quick draft
-
-GENERATING CONTENT:
-When ready to generate, include a JSON block in your response like this:
 \`\`\`json
-{"action": "generate_video", "prompt": "detailed cinematic prompt here, high quality, no text overlays, smooth camera movement", "model": "kling", "imageUrl": null, "aspectRatio": "16:9", "duration": "10"}
-\`\`\`
-or for images:
-\`\`\`json
-{"action": "generate_image", "prompt": "detailed image prompt, professional, high quality", "aspectRatio": "1:1"}
-\`\`\`
-or to suggest using their media:
-\`\`\`json
-{"action": "use_media", "mediaId": "id-here", "suggestion": "Turn this into a 10-second cinematic video"}
+{
+  "ready": true,
+  "brief": {
+    "type": "video",
+    "subject": "what's in the shot",
+    "action": "what's happening (for video)",
+    "mood": "emotional tone",
+    "style": "visual style",
+    "cameraAngle": "close-up | wide | overhead | eye-level | medium",
+    "cameraMovement": "pan | zoom-in | zoom-out | dolly | tracking | static | orbit",
+    "cameraSpeed": "slow | medium | fast",
+    "lighting": "description of lighting",
+    "colorPalette": "warm | cool | muted | vibrant | natural",
+    "background": "what's behind subject",
+    "platform": "instagram | tiktok | youtube | facebook | linkedin",
+    "duration": 10,
+    "purpose": "reel | ad | story | post | product-showcase | brand-story"
+  },
+  "description": "A 1-sentence human-readable description of what we'll create"
+}
 \`\`\`
 
-Only include the JSON block when you have enough info and the user is ready. Otherwise just chat.`
+Only include "ready": true when you have AT LEAST: subject, mood, and platform.
+If the user says to adjust something, output a new brief with the changes.
+For images, set type to "image" and omit camera/duration fields.
+
+AVAILABLE MODELS (for your reference, don't show to user):
+${videoModels.map(m => `- ${m.name}: ${m.bestFor}`).join('\n')}
+
+DO NOT write the actual generation prompt. Just capture creative direction. Our prompt engine handles the technical part.`
 
   try {
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 1000,
+      max_tokens: 800,
       system: systemPrompt,
       messages: messages.map(m => ({ role: m.role, content: m.content })),
     })
@@ -136,22 +146,56 @@ Only include the JSON block when you have enough info and the user is ready. Oth
 
     const text = textBlock.text
 
-    // Extract any action JSON from the response
+    // Extract creative brief JSON if present
     let action = null
     const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/)
+
     if (jsonMatch) {
       try {
-        action = JSON.parse(jsonMatch[1])
+        const parsed = JSON.parse(jsonMatch[1])
+
+        if (parsed.ready && parsed.brief) {
+          // ============================================================
+          // STAGE 2: Prompt Engineer — build model-specific prompt
+          // ============================================================
+
+          const brief: CreativeBrief = {
+            ...parsed.brief,
+            brandName: brandName || undefined,
+            referenceImageUrl: mediaContext?.url || undefined,
+          }
+
+          // Auto-determine aspect ratio from platform if not set
+          if (!brief.aspectRatio && brief.platform) {
+            brief.aspectRatio = getAspectRatioForPlatform(brief.platform)
+          }
+
+          // Pick the best model for this brief
+          const model = recommendModel(brief)
+
+          // Build the optimized prompt for this specific model
+          const optimizedPrompt = buildPromptFromBrief(brief, model)
+
+          action = {
+            action: brief.type === 'image' ? 'generate_image' : 'generate_video',
+            prompt: optimizedPrompt,
+            model,
+            imageUrl: brief.referenceImageUrl || null,
+            aspectRatio: brief.aspectRatio || (brief.type === 'video' ? '16:9' : '1:1'),
+            duration: String(brief.duration || 10),
+            brief, // Pass the full brief for transparency
+            description: parsed.description,
+          }
+        }
       } catch { /* not valid json, that's fine */ }
     }
 
-    // Clean text — remove the JSON block for display
+    // Clean text for display
     const displayText = text.replace(/```json\s*[\s\S]*?\s*```/g, '').trim()
 
     return NextResponse.json({
       message: displayText,
       action,
-      // Include media suggestions if relevant
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       availableMedia: mediaContext ? undefined : userMedia?.slice(0, 5).map((m: any) => ({
         id: m.id,
