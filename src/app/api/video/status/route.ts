@@ -70,9 +70,15 @@ export async function GET(request: NextRequest) {
     }
 
     // Still processing
+    const inferenceTime = status.metrics?.inference_time
+    const queuePos = status.queue_position
+
     return NextResponse.json({
       status: 'processing',
-      queuePosition: status.queue_position,
+      queuePosition: queuePos,
+      estimatedSeconds: queuePos && queuePos > 0
+        ? queuePos * 120 // ~2 min per position
+        : inferenceTime ? Math.max(0, 180 - inferenceTime) : 180,
     })
   } catch (error) {
     return NextResponse.json(

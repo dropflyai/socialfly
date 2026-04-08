@@ -68,6 +68,11 @@ export default function CreatorPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Background video generation
+  const [bgGenerating, setBgGenerating] = useState(false)
+  const [bgProgress, setBgProgress] = useState<{ model: string; startedAt: number; estimatedSeconds: number; queuePosition?: number } | null>(null)
+  const pollRef = useRef<NodeJS.Timeout | null>(null)
+
   // Post flow state
   const [showPostFlow, setShowPostFlow] = useState(false)
   const [postMediaUrl, setPostMediaUrl] = useState<string | null>(null)
@@ -162,52 +167,66 @@ export default function CreatorPage() {
           const data = await res.json()
 
           if (data.async && data.statusUrl) {
-            // Async generation — poll for result
+            // Async — run in background, keep chat usable
+            setGenerating(false)
+            setGeneratingType(null)
+            setBgGenerating(true)
+            setBgProgress({ model: data.model, startedAt: Date.now(), estimatedSeconds: 180, queuePosition: undefined })
+
             setMessages(prev => [...prev, {
               role: 'assistant',
-              content: `Creating your video with ${data.model}... This takes 2-5 minutes. I'll update when it's ready.`,
+              content: `Your video is generating with ${data.model}. This takes 2-5 minutes — you can keep chatting while it works! I'll show it here when it's ready.`,
             }])
 
-            // Poll every 10 seconds
-            const pollInterval = setInterval(async () => {
+            // Poll every 8 seconds
+            if (pollRef.current) clearInterval(pollRef.current)
+            pollRef.current = setInterval(async () => {
               try {
                 const statusRes = await fetch(data.statusUrl, { credentials: 'include' })
                 if (!statusRes.ok) return
                 const status = await statusRes.json()
 
                 if (status.status === 'completed' && status.videoUrl) {
-                  clearInterval(pollInterval)
-                  setGenerating(false)
-                  setGeneratingType(null)
-                  setMessages(prev => {
-                    const updated = [...prev]
-                    // Find the last assistant message and add media to it
-                    for (let i = updated.length - 1; i >= 0; i--) {
-                      if (updated[i].role === 'assistant' && !updated[i].generatedMedia) {
-                        updated[i] = { ...updated[i], generatedMedia: { type: 'video', url: status.videoUrl, model: data.model } }
-                        break
-                      }
-                    }
-                    return updated
-                  })
+                  if (pollRef.current) clearInterval(pollRef.current)
+                  setBgGenerating(false)
+                  setBgProgress(null)
+                  setMessages(prev => [...prev, {
+                    role: 'assistant',
+                    content: 'Your video is ready!',
+                    generatedMedia: { type: 'video', url: status.videoUrl, model: data.model },
+                  }])
+                  // Browser notification if tab not focused
+                  if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+                    new Notification('SocialFly', { body: 'Your video is ready!' })
+                  }
                 } else if (status.status === 'failed') {
-                  clearInterval(pollInterval)
-                  setGenerating(false)
-                  setGeneratingType(null)
+                  if (pollRef.current) clearInterval(pollRef.current)
+                  setBgGenerating(false)
+                  setBgProgress(null)
                   setMessages(prev => [...prev, { role: 'assistant', content: 'Video generation failed. Try a different style or model.' }])
+                } else if (status.status === 'processing') {
+                  setBgProgress(prev => prev ? {
+                    ...prev,
+                    estimatedSeconds: status.estimatedSeconds || Math.max(0, prev.estimatedSeconds - 8),
+                    queuePosition: status.queuePosition,
+                  } : prev)
                 }
-                // else still processing — keep polling
               } catch { /* ignore poll errors */ }
-            }, 10000)
+            }, 8000)
 
             // Safety timeout — stop polling after 8 minutes
             setTimeout(() => {
-              clearInterval(pollInterval)
-              setGenerating(false)
-              setGeneratingType(null)
+              if (pollRef.current) clearInterval(pollRef.current)
+              setBgGenerating(false)
+              setBgProgress(null)
             }, 480000)
 
-            return // Don't clear generating state yet
+            // Request notification permission
+            if ('Notification' in window && Notification.permission === 'default') {
+              Notification.requestPermission()
+            }
+
+            return
           } else {
             // Sync result
             setMessages(prev => {
@@ -392,6 +411,34 @@ export default function CreatorPage() {
       )}
 
       {/* Messages */}
+      {/* Background video progress bar */}
+      {bgGenerating && bgProgress && (
+        <div className="mx-4 mt-2 p-3 rounded-xl bg-primary/5 border border-primary/20 space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Video className="h-4 w-4 text-primary animate-pulse" />
+              <span className="text-sm font-medium">Generating video</span>
+              <Badge variant="secondary" className="text-[10px]">{bgProgress.model}</Badge>
+            </div>
+            <span className="text-xs text-muted-foreground">
+              {bgProgress.queuePosition && bgProgress.queuePosition > 0
+                ? `Queue #${bgProgress.queuePosition}`
+                : `~${Math.max(0, Math.ceil(bgProgress.estimatedSeconds / 60))} min left`
+              }
+            </span>
+          </div>
+          <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-1000"
+              style={{
+                width: `${Math.min(95, Math.max(5, ((Date.now() - bgProgress.startedAt) / (bgProgress.estimatedSeconds * 1000)) * 100))}%`,
+              }}
+            />
+          </div>
+          <p className="text-[10px] text-muted-foreground">You can keep chatting — the video will appear when ready</p>
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
         {messages.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -559,12 +606,12 @@ export default function CreatorPage() {
           </div>
         )}
 
-        {/* Generation progress */}
+        {/* Generation progress — for sync generation (images, fast video) */}
         {generating && (
           <div className="flex justify-start">
             <div className="bg-primary/5 border border-primary/20 rounded-2xl px-4 py-3 flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin text-primary" />
-              <span className="text-sm text-primary">Creating your {generatingType === 'generate_video' ? 'video' : 'image'}... {generatingType === 'generate_video' ? 'this may take 2-5 minutes for high quality' : 'this may take 15-30 seconds'}</span>
+              <span className="text-sm text-primary">Creating your {generatingType === 'generate_video' ? 'video' : 'image'}... {generatingType === 'generate_image' ? '15-30 seconds' : 'a moment'}</span>
             </div>
           </div>
         )}
