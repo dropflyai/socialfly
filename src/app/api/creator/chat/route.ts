@@ -32,29 +32,43 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 })
   }
 
-  const { messages, mediaContext } = await request.json() as {
+  const { messages, mediaContext, brandId } = await request.json() as {
     messages: ChatMessage[]
     mediaContext?: { type: 'image' | 'video'; url: string; name?: string }
+    brandId?: string
   }
 
   if (!messages?.length) {
     return NextResponse.json({ error: 'Messages required' }, { status: 400 })
   }
 
-  // Load brand context
+  // Load ALL brand profiles
   const serviceClient = createServiceClient()
+  const { data: allBrands } = await serviceClient
+    .from('brand_profiles')
+    .select('id, name, voice_tone, voice_description, target_audience, content_pillars')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const brands = (allBrands || []) as any[]
   let brandContext = ''
   let brandName = ''
-  const { data: brand } = await serviceClient
-    .from('brand_profiles')
-    .select('name, voice_tone, voice_description, target_audience, content_pillars')
-    .eq('user_id', user.id)
-    .limit(1)
-    .single()
 
-  if (brand) {
-    brandName = brand.name
-    brandContext = `User's brand: ${brand.name}. Tone: ${brand.voice_tone}. Audience: ${brand.target_audience || 'general'}. Pillars: ${(brand.content_pillars || []).join(', ')}.`
+  if (brandId) {
+    // User explicitly selected a brand
+    const selected = brands.find(b => b.id === brandId)
+    if (selected) {
+      brandName = selected.name
+      brandContext = `ACTIVE BRAND: ${selected.name}. Tone: ${selected.voice_tone}. Audience: ${selected.target_audience || 'general'}. Pillars: ${(selected.content_pillars || []).join(', ')}.`
+    }
+  } else if (brands.length === 1) {
+    // Only one brand — use it
+    brandName = brands[0].name
+    brandContext = `User's brand: ${brands[0].name}. Tone: ${brands[0].voice_tone}. Audience: ${brands[0].target_audience || 'general'}. Pillars: ${(brands[0].content_pillars || []).join(', ')}.`
+  } else if (brands.length > 1) {
+    // Multiple brands — list them so Claude can ask or detect
+    brandContext = `User has ${brands.length} brand profiles:\n${brands.map((b: { name: string; voice_tone: string; target_audience: string }) => `- "${b.name}" (tone: ${b.voice_tone}, audience: ${b.target_audience || 'general'})`).join('\n')}\n\nIf the user mentions a brand name or it's clear from context which brand they're creating for, use that brand's voice and style. If ambiguous, ask which brand this content is for.`
   }
 
   // Load available media
@@ -91,6 +105,12 @@ YOUR JOB:
    - Any specific style? (cinematic, minimal, etc.)
 3. When you have enough info, output a CREATIVE BRIEF as JSON
 
+BRAND HANDLING:
+${brands.length > 1 ? `- The user has multiple brands. If they mention a brand name (e.g., "for SocialFly" or "VoiceFly content"), use that brand's voice.
+- If they don't specify, ask: "Which brand is this for?" and list: ${brands.map(b => `"${b.name}"`).join(', ')}.
+- Include the brand name in the brief so we use the right voice.
+- Once they pick a brand, remember it for the rest of the conversation.` : brands.length === 1 ? `- User has one brand: "${brands[0].name}". Use its voice and style automatically.` : '- No brand profiles set up yet. Create content with a general professional tone.'}
+
 CONVERSATION RULES:
 - Be friendly and brief — 1-3 sentences per message
 - Don't overwhelm with options
@@ -120,7 +140,8 @@ Output a creative brief JSON block. This is NOT the final prompt — our prompt 
     "duration": 10,
     "purpose": "reel | ad | story | post | product-showcase | brand-story",
     "avoid": ["things user doesn't want", "like text or certain colors"],
-    "styleReference": "if user referenced a style, describe it here"
+    "styleReference": "if user referenced a style, describe it here",
+    "brandName": "which brand this content is for (use exact name from the brand list)"
   },
   "description": "A 1-sentence human-readable description of what we'll create"
 }
@@ -180,9 +201,24 @@ DO NOT write the actual generation prompt. Just capture creative direction. Our 
           // STAGE 2: Prompt Engineer — build model-specific prompt
           // ============================================================
 
+          // Resolve brand from brief
+          const briefBrandName = parsed.brief.brandName
+          let resolvedBrandName = brandName
+          if (briefBrandName && brands.length > 1) {
+            // Find the brand Claude picked from the conversation
+            const matched = brands.find((b: { name: string }) =>
+              b.name.toLowerCase() === briefBrandName.toLowerCase() ||
+              b.name.toLowerCase().includes(briefBrandName.toLowerCase()) ||
+              briefBrandName.toLowerCase().includes(b.name.toLowerCase())
+            )
+            if (matched) {
+              resolvedBrandName = matched.name
+            }
+          }
+
           let brief: CreativeBrief = {
             ...parsed.brief,
-            brandName: brandName || undefined,
+            brandName: resolvedBrandName || undefined,
             referenceImageUrl: mediaContext?.url || undefined,
           }
 
@@ -234,6 +270,7 @@ DO NOT write the actual generation prompt. Just capture creative direction. Our 
         url: m.file_url,
         type: m.asset_type,
       })),
+      brands: brands.map(b => ({ id: b.id, name: b.name })),
     })
   } catch (err) {
     return NextResponse.json(

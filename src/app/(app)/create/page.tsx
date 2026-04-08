@@ -65,6 +65,9 @@ export default function CreatorPage() {
   const [availableMedia, setAvailableMedia] = useState<MediaAsset[]>([])
   const [selectedMedia, setSelectedMedia] = useState<MediaAsset | null>(null)
   const [showMediaPicker, setShowMediaPicker] = useState(false)
+  const [brands, setBrands] = useState<{ id: string; name: string }[]>([])
+  const [selectedBrandId, setSelectedBrandId] = useState<string | undefined>(undefined)
+  const [showBrandPicker, setShowBrandPicker] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -147,6 +150,7 @@ export default function CreatorPage() {
         body: JSON.stringify({
           messages: newMessages.map(m => ({ role: m.role, content: m.content })),
           mediaContext: selectedMedia ? { type: selectedMedia.type, url: selectedMedia.url, name: selectedMedia.name } : undefined,
+          brandId: selectedBrandId,
         }),
       })
 
@@ -161,6 +165,9 @@ export default function CreatorPage() {
 
         if (data.availableMedia?.length && availableMedia.length === 0) {
           setAvailableMedia(data.availableMedia)
+        }
+        if (data.brands?.length && brands.length === 0) {
+          setBrands(data.brands)
         }
       }
     } catch {
@@ -342,6 +349,37 @@ export default function CreatorPage() {
               Using: {selectedMedia.name}
               <button onClick={() => setSelectedMedia(null)}><X className="h-3 w-3" /></button>
             </Badge>
+          )}
+          {brands.length > 1 && (
+            <div className="relative">
+              <button
+                onClick={() => setShowBrandPicker(!showBrandPicker)}
+                className="flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-muted hover:bg-muted/80 transition-all"
+              >
+                <span className="text-muted-foreground">Brand:</span>
+                <span className="font-medium">{selectedBrandId ? brands.find(b => b.id === selectedBrandId)?.name || 'Auto' : 'Auto'}</span>
+                <ChevronDown className="h-3 w-3 text-muted-foreground" />
+              </button>
+              {showBrandPicker && (
+                <div className="absolute top-full left-0 mt-1 bg-background border rounded-lg shadow-lg z-50 min-w-[160px]">
+                  <button
+                    onClick={() => { setSelectedBrandId(undefined); setShowBrandPicker(false) }}
+                    className={`w-full px-3 py-2 text-xs text-left hover:bg-muted transition-all ${!selectedBrandId ? 'text-primary font-medium' : ''}`}
+                  >
+                    Auto-detect from conversation
+                  </button>
+                  {brands.map(b => (
+                    <button
+                      key={b.id}
+                      onClick={() => { setSelectedBrandId(b.id); setShowBrandPicker(false) }}
+                      className={`w-full px-3 py-2 text-xs text-left hover:bg-muted transition-all ${selectedBrandId === b.id ? 'text-primary font-medium' : ''}`}
+                    >
+                      {b.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
         <div className="flex items-center gap-2">
