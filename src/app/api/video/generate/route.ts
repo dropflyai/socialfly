@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { prompt, imageUrl } = body
+  const { prompt, imageUrl, negativePrompt, duration, aspectRatio } = body
   const modelRaw = (body.model || 'auto').toLowerCase().trim()
 
   if (!prompt) {
@@ -91,17 +91,25 @@ export async function POST(request: NextRequest) {
   try {
     let result
 
+    const genParams = {
+      negativePrompt,
+      duration: duration ? parseInt(duration) : undefined,
+      aspectRatio,
+    }
+
     if (provider === 'auto') {
       result = await smartGenerateVideo({
         prompt,
         imageUrl,
         preferredProvider: 'auto',
+        ...genParams,
       })
     } else {
       result = await generateVideoWithProvider(
         provider as 'seedance' | 'kling' | 'minimax' | 'ltx',
         prompt,
         imageUrl,
+        genParams,
       )
     }
 

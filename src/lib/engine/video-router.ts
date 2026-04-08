@@ -272,9 +272,16 @@ export function pickVideoProvider(request: VideoRouteRequest): 'seedance' | 'kli
 /**
  * Generate video via Seedance 2.0 (FAL.ai hosted).
  */
+interface VideoGenParams {
+  negativePrompt?: string
+  duration?: number
+  aspectRatio?: string
+}
+
 async function generateWithSeedance(
   prompt: string,
   imageUrl?: string,
+  params?: VideoGenParams,
 ): Promise<GeneratedVideo> {
   const config = getConfig()
   fal.config({ credentials: config.falApiKey })
@@ -292,9 +299,8 @@ async function generateWithSeedance(
     seed: Math.floor(Math.random() * 1000000),
   }
 
-  if (imageUrl) {
-    input.image_url = imageUrl
-  }
+  if (params?.negativePrompt) input.negative_prompt = params.negativePrompt
+  if (imageUrl) input.image_url = imageUrl
 
   const result = await fal.subscribe(modelId, {
     input,
@@ -323,6 +329,7 @@ async function generateWithSeedance(
 async function generateWithMinimax(
   prompt: string,
   imageUrl?: string,
+  params?: VideoGenParams,
 ): Promise<GeneratedVideo> {
   const config = getConfig()
   fal.config({ credentials: config.falApiKey })
@@ -338,9 +345,8 @@ async function generateWithMinimax(
     prompt_optimizer: true,
   }
 
-  if (imageUrl) {
-    input.image_url = imageUrl
-  }
+  if (params?.negativePrompt) input.negative_prompt = params.negativePrompt
+  if (imageUrl) input.image_url = imageUrl
 
   const result = await fal.subscribe(modelId, { input })
 
@@ -364,6 +370,7 @@ async function generateWithMinimax(
 async function generateWithKling(
   prompt: string,
   imageUrl?: string,
+  params?: VideoGenParams,
 ): Promise<GeneratedVideo> {
   const config = getConfig()
   fal.config({ credentials: config.falApiKey })
@@ -376,18 +383,17 @@ async function generateWithKling(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const input: Record<string, any> = {
     prompt: enhancedPrompt,
-    duration: '10',
-    aspect_ratio: '16:9',
+    duration: String(params?.duration || 10),
+    aspect_ratio: params?.aspectRatio || '16:9',
   }
 
-  if (imageUrl) {
-    input.image_url = imageUrl
-  }
+  if (params?.negativePrompt) input.negative_prompt = params.negativePrompt
+  if (imageUrl) input.image_url = imageUrl
 
   const result = await fal.subscribe(modelId, {
     input,
-    pollInterval: 5000,   // Check every 5 seconds
-    timeout: 270000,       // 4.5 min timeout (under Vercel's 5 min limit)
+    pollInterval: 5000,
+    timeout: 270000,
     logs: true,
   })
 
@@ -411,6 +417,7 @@ async function generateWithKling(
 async function generateWithLtx(
   prompt: string,
   imageUrl?: string,
+  params?: VideoGenParams,
 ): Promise<GeneratedVideo> {
   const config = getConfig()
   fal.config({ credentials: config.falApiKey })
@@ -427,9 +434,8 @@ async function generateWithLtx(
     guidance_scale: 4,
   }
 
-  if (imageUrl) {
-    input.image_url = imageUrl
-  }
+  if (params?.negativePrompt) input.negative_prompt = params.negativePrompt
+  if (imageUrl) input.image_url = imageUrl
 
   const result = await fal.subscribe(modelId, { input })
 
@@ -511,10 +517,11 @@ function enhanceVideoPrompt(prompt: string): string {
  * Smart video generation — routes to the best provider automatically.
  */
 export async function smartGenerateVideo(
-  options: GenerateVideoOptions
+  options: GenerateVideoOptions & { negativePrompt?: string; duration?: number; aspectRatio?: string }
 ): Promise<GeneratedVideo & { routingScore?: VideoProviderScore[] }> {
-  const { prompt: rawPrompt, imageUrl, preferredProvider } = options
+  const { prompt: rawPrompt, imageUrl, preferredProvider, negativePrompt, duration, aspectRatio } = options
   const prompt = enhanceVideoPrompt(rawPrompt)
+  const params: VideoGenParams = { negativePrompt, duration, aspectRatio }
 
   const routeRequest: VideoRouteRequest = {
     prompt,
@@ -529,19 +536,19 @@ export async function smartGenerateVideo(
 
   switch (provider) {
     case 'seedance':
-      result = await generateWithSeedance(prompt, imageUrl)
+      result = await generateWithSeedance(prompt, imageUrl, params)
       break
     case 'kling':
-      result = await generateWithKling(prompt, imageUrl)
+      result = await generateWithKling(prompt, imageUrl, params)
       break
     case 'minimax':
-      result = await generateWithMinimax(prompt, imageUrl)
+      result = await generateWithMinimax(prompt, imageUrl, params)
       break
     case 'ltx':
-      result = await generateWithLtx(prompt, imageUrl)
+      result = await generateWithLtx(prompt, imageUrl, params)
       break
     default:
-      result = await generateWithKling(prompt, imageUrl)
+      result = await generateWithKling(prompt, imageUrl, params)
   }
 
   return {
@@ -557,19 +564,20 @@ export async function generateVideoWithProvider(
   provider: 'seedance' | 'kling' | 'minimax' | 'ltx',
   rawPrompt: string,
   imageUrl?: string,
+  params?: VideoGenParams,
 ): Promise<GeneratedVideo> {
   const prompt = enhanceVideoPrompt(rawPrompt)
   switch (provider) {
     case 'seedance':
-      return generateWithSeedance(prompt, imageUrl)
+      return generateWithSeedance(prompt, imageUrl, params)
     case 'kling':
-      return generateWithKling(prompt, imageUrl)
+      return generateWithKling(prompt, imageUrl, params)
     case 'minimax':
-      return generateWithMinimax(prompt, imageUrl)
+      return generateWithMinimax(prompt, imageUrl, params)
     case 'ltx':
-      return generateWithLtx(prompt, imageUrl)
+      return generateWithLtx(prompt, imageUrl, params)
     default:
-      return generateWithKling(prompt, imageUrl)
+      return generateWithKling(prompt, imageUrl, params)
   }
 }
 

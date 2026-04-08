@@ -16,6 +16,7 @@ interface ChatMessage {
   action?: {
     action: string
     prompt?: string
+    negativePrompt?: string
     model?: string
     imageUrl?: string | null
     aspectRatio?: string
@@ -23,15 +24,20 @@ interface ChatMessage {
     mediaId?: string
     suggestion?: string
     description?: string
+    cacheKey?: string
     brief?: {
       subject?: string
       mood?: string
       style?: string
       cameraAngle?: string
       cameraMovement?: string
+      cameraSpeed?: string
       lighting?: string
+      colorPalette?: string
       platform?: string
       purpose?: string
+      avoid?: string[]
+      styleReference?: string
       [key: string]: unknown
     }
   } | null
@@ -132,8 +138,11 @@ export default function CreatorPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             prompt: action.prompt,
+            negativePrompt: action.negativePrompt,
             model: action.model || 'auto',
             imageUrl: action.imageUrl || selectedMedia?.url,
+            duration: action.duration,
+            aspectRatio: action.aspectRatio,
           }),
         })
 

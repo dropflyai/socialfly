@@ -4,9 +4,11 @@ import Anthropic from '@anthropic-ai/sdk'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 import { getAvailableVideoModels } from '@/lib/engine/video-router'
 import {
-  buildPromptFromBrief,
+  buildFullPrompt,
   getAspectRatioForPlatform,
   recommendModel,
+  refineBrief,
+  extractStyleFromReference,
   type CreativeBrief,
 } from '@/lib/engine/prompt-engineer'
 
@@ -104,26 +106,45 @@ Output a creative brief JSON block. This is NOT the final prompt — our prompt 
   "ready": true,
   "brief": {
     "type": "video",
-    "subject": "what's in the shot",
-    "action": "what's happening (for video)",
-    "mood": "emotional tone",
-    "style": "visual style",
-    "cameraAngle": "close-up | wide | overhead | eye-level | medium",
-    "cameraMovement": "pan | zoom-in | zoom-out | dolly | tracking | static | orbit",
+    "subject": "what's in the shot — be specific and descriptive",
+    "action": "what's happening over time (for video)",
+    "mood": "emotional tone (warm, energetic, calm, dramatic, playful, etc.)",
+    "style": "visual style (cinematic, minimal, retro, neon, documentary, etc.)",
+    "cameraAngle": "close-up | wide | overhead | eye-level | medium | extreme-close-up",
+    "cameraMovement": "pan | zoom-in | zoom-out | dolly | tracking | static | orbit | crane",
     "cameraSpeed": "slow | medium | fast",
-    "lighting": "description of lighting",
-    "colorPalette": "warm | cool | muted | vibrant | natural",
-    "background": "what's behind subject",
+    "lighting": "specific lighting description (golden hour, soft studio, dramatic shadows, neon glow, etc.)",
+    "colorPalette": "warm | cool | muted | vibrant | natural | monochrome",
+    "background": "what's behind the subject",
     "platform": "instagram | tiktok | youtube | facebook | linkedin",
     "duration": 10,
-    "purpose": "reel | ad | story | post | product-showcase | brand-story"
+    "purpose": "reel | ad | story | post | product-showcase | brand-story",
+    "avoid": ["things user doesn't want", "like text or certain colors"],
+    "styleReference": "if user referenced a style, describe it here"
   },
   "description": "A 1-sentence human-readable description of what we'll create"
 }
 \`\`\`
 
+REFINEMENT — when user says "make it warmer" or "change the camera":
+Output a new brief with ONLY the changed fields plus "refinement": true:
+\`\`\`json
+{
+  "ready": true,
+  "refinement": true,
+  "previousBrief": {copy of the last brief you sent},
+  "brief": {only the fields that changed},
+  "description": "Updated description"
+}
+\`\`\`
+
+STYLE REFERENCES — when user says "make it look like X":
+Include a "styleReference" field describing the visual style they're referencing.
+
+THINGS TO AVOID — when user says "no text" or "don't include X":
+Add those to the "avoid" array in the brief.
+
 Only include "ready": true when you have AT LEAST: subject, mood, and platform.
-If the user says to adjust something, output a new brief with the changes.
 For images, set type to "image" and omit camera/duration fields.
 
 AVAILABLE MODELS (for your reference, don't show to user):
@@ -159,10 +180,21 @@ DO NOT write the actual generation prompt. Just capture creative direction. Our 
           // STAGE 2: Prompt Engineer — build model-specific prompt
           // ============================================================
 
-          const brief: CreativeBrief = {
+          let brief: CreativeBrief = {
             ...parsed.brief,
             brandName: brandName || undefined,
             referenceImageUrl: mediaContext?.url || undefined,
+          }
+
+          // Handle style reference — extract style from description
+          if (parsed.brief.styleReference) {
+            const styleExtracted = extractStyleFromReference(parsed.brief.styleReference)
+            brief = refineBrief(brief, styleExtracted)
+          }
+
+          // Handle iterative refinement — if there's a previous brief, merge
+          if (parsed.refinement && parsed.previousBrief) {
+            brief = refineBrief(parsed.previousBrief as CreativeBrief, brief)
           }
 
           // Auto-determine aspect ratio from platform if not set
@@ -170,21 +202,20 @@ DO NOT write the actual generation prompt. Just capture creative direction. Our 
             brief.aspectRatio = getAspectRatioForPlatform(brief.platform)
           }
 
-          // Pick the best model for this brief
-          const model = recommendModel(brief)
-
-          // Build the optimized prompt for this specific model
-          const optimizedPrompt = buildPromptFromBrief(brief, model)
+          // Build the full optimized prompt (includes negative prompt, model selection)
+          const fullPrompt = buildFullPrompt(brief)
 
           action = {
             action: brief.type === 'image' ? 'generate_image' : 'generate_video',
-            prompt: optimizedPrompt,
-            model,
+            prompt: fullPrompt.prompt,
+            negativePrompt: fullPrompt.negativePrompt,
+            model: fullPrompt.model,
             imageUrl: brief.referenceImageUrl || null,
-            aspectRatio: brief.aspectRatio || (brief.type === 'video' ? '16:9' : '1:1'),
-            duration: String(brief.duration || 10),
-            brief, // Pass the full brief for transparency
+            aspectRatio: fullPrompt.aspectRatio,
+            duration: String(fullPrompt.duration),
+            brief, // Pass the full brief so the frontend can show it and we can refine later
             description: parsed.description,
+            cacheKey: fullPrompt.cacheKey,
           }
         }
       } catch { /* not valid json, that's fine */ }
