@@ -68,6 +68,23 @@ export default function CreatorPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Recent creations
+  const [recentCreations, setRecentCreations] = useState<{ url: string; type: string; name: string; createdAt: string }[]>([])
+
+  // Auto-save generated content to media library
+  async function autoSaveToLibrary(mediaUrl: string, mediaType: 'image' | 'video') {
+    try {
+      const res = await fetch(mediaUrl)
+      const blob = await res.blob()
+      const formData = new FormData()
+      formData.append('file', blob, `ai-${mediaType}-${Date.now()}.${mediaType === 'video' ? 'mp4' : 'png'}`)
+      formData.append('name', `AI ${mediaType} - ${new Date().toLocaleString()}`)
+      formData.append('category', 'ai-generated')
+      await fetch('/api/media', { method: 'POST', body: formData })
+      setRecentCreations(prev => [{ url: mediaUrl, type: mediaType, name: `AI ${mediaType}`, createdAt: new Date().toISOString() }, ...prev.slice(0, 9)])
+    } catch { /* silent — don't block the user */ }
+  }
+
   // Background video generation
   const [bgGenerating, setBgGenerating] = useState(false)
   const [bgProgress, setBgProgress] = useState<{ model: string; startedAt: number; estimatedSeconds: number; queuePosition?: number } | null>(null)
@@ -89,7 +106,7 @@ export default function CreatorPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Send initial greeting on mount
+  // Send initial greeting and load data on mount
   useEffect(() => {
     setMessages([{
       role: 'assistant',
@@ -99,9 +116,18 @@ export default function CreatorPage() {
     fetch('/api/media?type=all')
       .then(res => res.ok ? res.json() : null)
       .then(data => {
-        if (data?.assets) setAvailableMedia(data.assets.slice(0, 20))
+        if (data?.assets) {
+          setAvailableMedia(data.assets.slice(0, 20))
+          // Show recent AI-generated content
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const aiGenerated = data.assets.filter((a: any) => a.name?.startsWith('AI ')).slice(0, 6)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          setRecentCreations(aiGenerated.map((a: any) => ({ url: a.url, type: a.type, name: a.name, createdAt: a.created_at })))
+        }
       })
       .catch(() => {})
+    // Cleanup poll on unmount
+    return () => { if (pollRef.current) clearInterval(pollRef.current) }
   }, [])
 
   async function sendMessage(text?: string) {
@@ -195,6 +221,7 @@ export default function CreatorPage() {
                     content: 'Your video is ready!',
                     generatedMedia: { type: 'video', url: status.videoUrl, model: data.model },
                   }])
+                  autoSaveToLibrary(status.videoUrl, 'video')
                   // Browser notification if tab not focused
                   if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
                     new Notification('SocialFly', { body: 'Your video is ready!' })
@@ -237,6 +264,7 @@ export default function CreatorPage() {
               }
               return updated
             })
+            autoSaveToLibrary(data.videoUrl, 'video')
             setGenerating(false)
             setGeneratingType(null)
           }
@@ -266,6 +294,7 @@ export default function CreatorPage() {
             }
             return updated
           })
+          autoSaveToLibrary(data.imageUrl, 'image')
         } else {
           const err = await res.json()
           setMessages(prev => [...prev, { role: 'assistant', content: `Generation failed: ${err.error}` }])
@@ -619,9 +648,41 @@ export default function CreatorPage() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Quick suggestions (show when no messages yet) */}
+      {/* Quick suggestions + recent creations */}
       {messages.length <= 1 && (
-        <div className="px-4 pb-2">
+        <div className="px-4 pb-2 space-y-3">
+          {/* Recent creations */}
+          {recentCreations.length > 0 && (
+            <div>
+              <p className="text-xs text-muted-foreground mb-2">Recent creations</p>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {recentCreations.map((item, i) => (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      setSelectedMedia({ id: `recent-${i}`, name: item.name, url: item.url, type: item.type })
+                      sendMessage(`I want to work with this ${item.type} I created earlier`)
+                    }}
+                    className="flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 border-transparent hover:border-primary/30 transition-all relative"
+                  >
+                    {item.type === 'video' ? (
+                      <div className="w-full h-full bg-muted flex items-center justify-center">
+                        <Play className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={item.url} alt="" className="w-full h-full object-cover" />
+                    )}
+                    <div className="absolute bottom-0 inset-x-0 bg-black/50 text-[9px] text-white text-center py-0.5">
+                      {item.type}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Suggestions */}
           <div className="flex flex-wrap gap-2">
             {[
               'Create a product showcase video',
