@@ -81,16 +81,14 @@ export async function POST(request: NextRequest) {
     let result
 
     if (provider === 'auto') {
-      // Smart routing — picks the best provider based on prompt analysis
       result = await smartGenerateVideo({
         prompt,
         imageUrl,
         preferredProvider: 'auto',
       })
     } else {
-      // User chose a specific provider
       result = await generateVideoWithProvider(
-        provider as 'seedance' | 'minimax' | 'ltx',
+        provider as 'seedance' | 'kling' | 'minimax' | 'ltx',
         prompt,
         imageUrl,
       )
@@ -104,7 +102,25 @@ export async function POST(request: NextRequest) {
       routingScore: 'routingScore' in result ? result.routingScore : undefined,
     })
   } catch (error) {
-    console.error('Video generation error:', error)
+    console.error(`Video generation error (provider: ${provider}):`, error)
+
+    // Fallback: if the requested model failed, try LTX (fast/reliable)
+    if (provider !== 'ltx') {
+      try {
+        console.log('Falling back to LTX...')
+        const fallback = await generateVideoWithProvider('ltx', prompt, imageUrl)
+        return NextResponse.json({
+          success: true,
+          videoUrl: fallback.url,
+          model: fallback.model + ' (fallback)',
+          provider: 'ltx',
+          fallbackFrom: provider,
+        })
+      } catch (fallbackError) {
+        console.error('Fallback also failed:', fallbackError)
+      }
+    }
+
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Video generation failed' },
       { status: 500 }
