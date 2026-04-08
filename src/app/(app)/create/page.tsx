@@ -171,7 +171,7 @@ export default function CreatorPage() {
             // Poll every 10 seconds
             const pollInterval = setInterval(async () => {
               try {
-                const statusRes = await fetch(data.statusUrl)
+                const statusRes = await fetch(data.statusUrl, { credentials: 'include' })
                 if (!statusRes.ok) return
                 const status = await statusRes.json()
 
@@ -218,10 +218,14 @@ export default function CreatorPage() {
               }
               return updated
             })
+            setGenerating(false)
+            setGeneratingType(null)
           }
         } else {
           const err = await res.json()
           setMessages(prev => [...prev, { role: 'assistant', content: `Generation failed: ${err.error}` }])
+          setGenerating(false)
+          setGeneratingType(null)
         }
       } else if (action.action === 'generate_image') {
         const res = await fetch('/api/image/generate', {
@@ -247,12 +251,15 @@ export default function CreatorPage() {
           const err = await res.json()
           setMessages(prev => [...prev, { role: 'assistant', content: `Generation failed: ${err.error}` }])
         }
+        setGenerating(false)
+        setGeneratingType(null)
       }
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: 'Generation failed. Try again.' }])
+      setGenerating(false)
+      setGeneratingType(null)
     }
-    setGenerating(false)
-    setGeneratingType(null)
+    // Note: for async video, generating state is cleared by the poll handler, not here
   }
 
   async function handleUpload(files: FileList | null) {
