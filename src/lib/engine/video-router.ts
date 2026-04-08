@@ -279,13 +279,14 @@ async function generateWithSeedance(
   const config = getConfig()
   fal.config({ credentials: config.falApiKey })
 
+  const enhancedPrompt = enhanceVideoPrompt(prompt)
   const modelId = imageUrl
     ? MODEL_IDS.seedance.imageToVideo
     : MODEL_IDS.seedance.textToVideo
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const input: Record<string, any> = {
-    prompt,
+    prompt: enhancedPrompt,
     num_inference_steps: 30,
     guidance_scale: 5,
     seed: Math.floor(Math.random() * 1000000),
@@ -321,13 +322,14 @@ async function generateWithMinimax(
   const config = getConfig()
   fal.config({ credentials: config.falApiKey })
 
+  const enhancedPrompt = enhanceVideoPrompt(prompt)
   const modelId = imageUrl
     ? MODEL_IDS.minimax.imageToVideo
     : MODEL_IDS.minimax.textToVideo
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const input: Record<string, any> = {
-    prompt,
+    prompt: enhancedPrompt,
     prompt_optimizer: true,
   }
 
@@ -361,14 +363,15 @@ async function generateWithKling(
   const config = getConfig()
   fal.config({ credentials: config.falApiKey })
 
+  const enhancedPrompt = enhanceVideoPrompt(prompt)
   const modelId = imageUrl
     ? MODEL_IDS.kling.imageToVideo
     : MODEL_IDS.kling.textToVideo
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const input: Record<string, any> = {
-    prompt,
-    duration: '5',
+    prompt: enhancedPrompt,
+    duration: '10',
     aspect_ratio: '16:9',
   }
 
@@ -402,15 +405,16 @@ async function generateWithLtx(
   const config = getConfig()
   fal.config({ credentials: config.falApiKey })
 
+  const enhancedPrompt = enhanceVideoPrompt(prompt)
   const modelId = imageUrl
     ? MODEL_IDS.ltx.imageToVideo
     : MODEL_IDS.ltx.textToVideo
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const input: Record<string, any> = {
-    prompt,
-    num_inference_steps: 30,
-    guidance_scale: 3,
+    prompt: enhancedPrompt,
+    num_inference_steps: 40,
+    guidance_scale: 4,
   }
 
   if (imageUrl) {
@@ -467,12 +471,40 @@ function extractVideoUrl(data: unknown): string | undefined {
 // ============================================================================
 
 /**
+ * Enhance a video prompt to get better results from AI models.
+ */
+function enhanceVideoPrompt(prompt: string): string {
+  // Don't re-enhance if already detailed
+  if (prompt.length > 200) return prompt
+
+  const enhancements: string[] = []
+
+  // Add quality keywords if not present
+  const hasQuality = ['cinematic', '4k', 'hd', 'high quality', 'professional', 'detailed'].some(kw => prompt.toLowerCase().includes(kw))
+  if (!hasQuality) enhancements.push('high quality, cinematic')
+
+  // Add "no text" to avoid random text overlays
+  const hasTextInstructions = ['text', 'words', 'caption', 'subtitle', 'title'].some(kw => prompt.toLowerCase().includes(kw))
+  if (!hasTextInstructions) enhancements.push('no text overlays, no watermarks')
+
+  // Add smooth motion
+  const hasMotion = ['smooth', 'steady', 'fluid', 'slow motion'].some(kw => prompt.toLowerCase().includes(kw))
+  if (!hasMotion) enhancements.push('smooth camera movement')
+
+  if (enhancements.length > 0) {
+    return `${prompt}. ${enhancements.join(', ')}.`
+  }
+  return prompt
+}
+
+/**
  * Smart video generation — routes to the best provider automatically.
  */
 export async function smartGenerateVideo(
   options: GenerateVideoOptions
 ): Promise<GeneratedVideo & { routingScore?: VideoProviderScore[] }> {
-  const { prompt, imageUrl, preferredProvider } = options
+  const { prompt: rawPrompt, imageUrl, preferredProvider } = options
+  const prompt = enhanceVideoPrompt(rawPrompt)
 
   const routeRequest: VideoRouteRequest = {
     prompt,
@@ -513,9 +545,10 @@ export async function smartGenerateVideo(
  */
 export async function generateVideoWithProvider(
   provider: 'seedance' | 'kling' | 'minimax' | 'ltx',
-  prompt: string,
+  rawPrompt: string,
   imageUrl?: string,
 ): Promise<GeneratedVideo> {
+  const prompt = enhanceVideoPrompt(rawPrompt)
   switch (provider) {
     case 'seedance':
       return generateWithSeedance(prompt, imageUrl)
