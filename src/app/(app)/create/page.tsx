@@ -361,7 +361,7 @@ export default function CreatorPage() {
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={msg.generatedMedia.url} alt="" className="w-full max-h-80 object-contain" />
                   )}
-                  <div className="p-2 flex items-center justify-between bg-muted/50">
+                  <div className="p-2 space-y-2 bg-muted/50">
                     <div className="flex items-center gap-2">
                       {msg.generatedMedia.model && (
                         <Badge variant="secondary" className="text-[10px]">{msg.generatedMedia.model}</Badge>
@@ -369,13 +369,58 @@ export default function CreatorPage() {
                       <Badge variant="outline" className="text-[10px]">{msg.generatedMedia.type}</Badge>
                     </div>
                     <div className="flex gap-1">
-                      <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs" onClick={() => sendMessage("I like it — let's make another variation")}>
-                        <RefreshCw className="h-3 w-3" />Remix
+                      {/* Save to library */}
+                      <Button size="sm" variant="outline" className="h-7 gap-1 text-xs flex-1" onClick={async () => {
+                        try {
+                          const res = await fetch(msg.generatedMedia!.url)
+                          const blob = await res.blob()
+                          const formData = new FormData()
+                          formData.append('file', blob, `ai-${msg.generatedMedia!.type}.${msg.generatedMedia!.type === 'video' ? 'mp4' : 'png'}`)
+                          formData.append('name', `AI ${msg.generatedMedia!.type} - ${new Date().toLocaleDateString()}`)
+                          formData.append('category', 'general')
+                          const saveRes = await fetch('/api/media', { method: 'POST', body: formData })
+                          if (saveRes.ok) {
+                            setMessages(prev => [...prev, { role: 'assistant', content: 'Saved to your media library!' }])
+                          }
+                        } catch { setMessages(prev => [...prev, { role: 'assistant', content: 'Failed to save — try downloading instead.' }]) }
+                      }}>
+                        <Download className="h-3 w-3" />Save to Library
                       </Button>
-                      <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs" onClick={() => sendMessage('Schedule this to post')}>
-                        <Calendar className="h-3 w-3" />Post
+                      {/* Download */}
+                      <Button size="sm" variant="outline" className="h-7 gap-1 text-xs" asChild>
+                        <a href={msg.generatedMedia.url} download={`socialfly-${msg.generatedMedia.type}.${msg.generatedMedia.type === 'video' ? 'mp4' : 'png'}`} target="_blank" rel="noopener noreferrer">
+                          <Download className="h-3 w-3" />
+                        </a>
+                      </Button>
+                      {/* Remix */}
+                      <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs" onClick={() => sendMessage("Make a different variation of this — same concept, fresh take")}>
+                        <RefreshCw className="h-3 w-3" />
                       </Button>
                     </div>
+                    {/* Post / Schedule */}
+                    <Button size="sm" className="w-full h-8 gap-1 text-xs" onClick={async () => {
+                      try {
+                        const res = await fetch('/api/posts/publish', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            text: messages.filter(m => m.action?.description).pop()?.action?.description || 'AI generated content',
+                            platforms: ['instagram'],
+                            mediaUrls: [msg.generatedMedia!.url],
+                            mediaType: msg.generatedMedia!.type === 'video' ? 'video' : 'image',
+                            scheduleFor: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+                          }),
+                        })
+                        if (res.ok) {
+                          setMessages(prev => [...prev, { role: 'assistant', content: 'Scheduled to post in 5 minutes! Check your Schedule page to see it.' }])
+                        } else {
+                          const err = await res.json()
+                          setMessages(prev => [...prev, { role: 'assistant', content: `Couldn't schedule: ${err.error}. Try saving to your library and posting from the Schedule page.` }])
+                        }
+                      } catch { setMessages(prev => [...prev, { role: 'assistant', content: 'Something went wrong scheduling. Try saving to library first.' }]) }
+                    }}>
+                      <Send className="h-3 w-3" />Schedule Post (5 min)
+                    </Button>
                   </div>
                 </div>
               )}
