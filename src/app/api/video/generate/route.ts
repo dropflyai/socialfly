@@ -55,21 +55,32 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const { prompt, imageUrl, model = 'auto' } = await request.json()
+  const body = await request.json()
+  const { prompt, imageUrl } = body
+  const modelRaw = (body.model || 'auto').toLowerCase().trim()
 
   if (!prompt) {
     return NextResponse.json({ error: 'Missing prompt' }, { status: 400 })
   }
 
+  // Normalize model name — handle variations from AI chat
+  const modelNormalized: VideoModel = modelRaw in MODEL_TO_PROVIDER
+    ? modelRaw as VideoModel
+    : modelRaw.includes('seedance') ? 'seedance'
+    : modelRaw.includes('kling') ? 'kling'
+    : modelRaw.includes('ltx') || modelRaw.includes('fast') ? 'fast'
+    : modelRaw.includes('minimax') ? 'quality'
+    : 'auto'
+
   // Determine credit action based on model
-  const provider = MODEL_TO_PROVIDER[model as VideoModel] || 'auto'
+  const provider = MODEL_TO_PROVIDER[modelNormalized]
   const creditAction = provider === 'ltx'
     ? 'video_fast' as const
     : provider === 'seedance'
       ? 'video_quality' as const
       : 'video_quality' as const
 
-  const creditResult = await deductCredits(user.id, creditAction, { model })
+  const creditResult = await deductCredits(user.id, creditAction, { model: modelNormalized })
   if (!creditResult.success) {
     return NextResponse.json(
       { error: 'Insufficient credits. Please upgrade your plan.', creditsRemaining: creditResult.creditsRemaining },
