@@ -588,6 +588,68 @@ export default function CreatorPage() {
                       <RefreshCw className="h-3 w-3" />
                     </Button>
                   </div>
+                  {/* Create Final Video — merge video + audio + captions */}
+                  {(() => {
+                    const lastVideo = messages.filter(m => m.generatedMedia?.type === 'video').pop()
+                    if (!lastVideo?.generatedMedia) return null
+                    const lastBrief = messages.filter(m => m.action?.brief).pop()?.action?.brief
+                    return (
+                      <Button
+                        size="sm"
+                        className="w-full h-8 gap-1 text-xs bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                        onClick={async () => {
+                          setMessages(prev => [...prev, {
+                            role: 'assistant',
+                            content: 'Creating your final video — merging video + voiceover + captions. This takes about 30 seconds...',
+                          }])
+                          try {
+                            const res = await fetch('/api/video/compose', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                videoUrl: lastVideo.generatedMedia!.url,
+                                audioUrl: msg.generatedAudio!.url,
+                                captionText: lastBrief?.subject || undefined,
+                                brandName: lastBrief?.brandName || undefined,
+                                aspectRatio: lastBrief?.platform === 'instagram' || lastBrief?.platform === 'tiktok' ? '9:16' : '16:9',
+                                captionStyle: 'bold',
+                                captionPosition: 'bottom',
+                              }),
+                            })
+                            if (res.ok) {
+                              const data = await res.json()
+                              // Poll for completion
+                              const poll = setInterval(async () => {
+                                const statusRes = await fetch(data.statusUrl, { credentials: 'include' })
+                                if (!statusRes.ok) return
+                                const status = await statusRes.json()
+                                if (status.status === 'succeeded') {
+                                  clearInterval(poll)
+                                  setMessages(prev => [...prev, {
+                                    role: 'assistant',
+                                    content: 'Your final video is ready! Video + voiceover + captions all merged.',
+                                    generatedMedia: { type: 'video', url: status.url, model: 'Final Render' },
+                                  }])
+                                  autoSaveToLibrary(status.url, 'video')
+                                } else if (status.status === 'failed') {
+                                  clearInterval(poll)
+                                  setMessages(prev => [...prev, { role: 'assistant', content: 'Final render failed. Try downloading the video and audio separately.' }])
+                                }
+                              }, 5000)
+                              setTimeout(() => clearInterval(poll), 120000)
+                            } else {
+                              const err = await res.json()
+                              setMessages(prev => [...prev, { role: 'assistant', content: `Merge failed: ${err.error}` }])
+                            }
+                          } catch {
+                            setMessages(prev => [...prev, { role: 'assistant', content: 'Something went wrong merging. Try downloading separately.' }])
+                          }
+                        }}
+                      >
+                        <Video className="h-3 w-3" />Create Final Video (Video + Voiceover + Captions)
+                      </Button>
+                    )
+                  })()}
                 </div>
               )}
 
