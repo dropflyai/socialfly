@@ -559,36 +559,14 @@ export default function CreatorPage() {
                 <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
               </div>
 
-              {/* Audio action card */}
+              {/* Audio action card with editable script */}
               {msg.action?.action === 'generate_audio' && !msg.generatedAudio && (
-                <div className="mt-2 rounded-xl border bg-purple-500/5 overflow-hidden">
-                  <div className="p-3 border-b border-purple-500/10">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-purple-500" />
-                      <span className="text-xs font-medium">{msg.action.description || 'Voiceover'}</span>
-                      <Badge variant="secondary" className="text-[10px]">{msg.action.style || 'voiceover'}</Badge>
-                    </div>
-                  </div>
-                  <div className="p-3">
-                    <p className="text-sm italic text-muted-foreground mb-2">&quot;{msg.action.script}&quot;</p>
-                    <div className="text-[10px] text-muted-foreground mb-2">
-                      Voice: {msg.action.voiceTone || 'warm'} {msg.action.voiceGender || 'female'}
-                    </div>
-                  </div>
-                  <div className="p-3 border-t border-purple-500/10">
-                    <div className="text-[10px] text-muted-foreground text-center mb-2">Uses 1 credit</div>
-                    <div className="flex gap-2">
-                      <Button size="sm" onClick={() => handleGenerate(msg.action)} disabled={generating} className="flex-1 gap-1 bg-purple-600 hover:bg-purple-700">
-                        {generating && generatingType === 'generate_audio' ? (
-                          <><Loader2 className="h-3 w-3 animate-spin" />Generating...</>
-                        ) : (
-                          <><Sparkles className="h-3 w-3" />Generate Voiceover</>
-                        )}
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => sendMessage('Change the script —')}>Adjust</Button>
-                    </div>
-                  </div>
-                </div>
+                <AudioScriptCard
+                  action={msg.action}
+                  generating={generating}
+                  generatingType={generatingType}
+                  onGenerate={(script) => handleGenerate({ ...msg.action!, script })}
+                />
               )}
 
               {/* Audio player */}
@@ -1073,6 +1051,86 @@ export default function CreatorPage() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// Editable voiceover script card
+function AudioScriptCard({
+  action,
+  generating,
+  generatingType,
+  onGenerate,
+}: {
+  action: ChatMessage['action']
+  generating: boolean
+  generatingType: string | null
+  onGenerate: (script: string) => void
+}) {
+  const [editedScript, setEditedScript] = useState(action?.script || '')
+  const [isEditing, setIsEditing] = useState(false)
+
+  return (
+    <div className="mt-2 rounded-xl border bg-purple-500/5 overflow-hidden">
+      <div className="p-3 border-b border-purple-500/10">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-purple-500" />
+            <span className="text-xs font-medium">{action?.description || 'Voiceover'}</span>
+            <Badge variant="secondary" className="text-[10px]">{action?.style || 'voiceover'}</Badge>
+          </div>
+          <div className="text-[10px] text-muted-foreground">
+            Voice: {action?.voiceTone || 'warm'} {action?.voiceGender || 'female'}
+          </div>
+        </div>
+      </div>
+      <div className="p-3">
+        {isEditing ? (
+          <div className="space-y-2">
+            <textarea
+              value={editedScript}
+              onChange={e => setEditedScript(e.target.value)}
+              className="w-full min-h-20 p-3 rounded-lg border bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+              placeholder="Write your voiceover script..."
+            />
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" className="text-xs" onClick={() => { setEditedScript(action?.script || ''); setIsEditing(false) }}>
+                Cancel
+              </Button>
+              <Button size="sm" variant="outline" className="text-xs" onClick={() => setIsEditing(false)}>
+                Done Editing
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="relative group">
+            <p className="text-sm italic text-muted-foreground pr-16">&quot;{editedScript}&quot;</p>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="absolute top-0 right-0 h-6 gap-1 text-[10px] opacity-60 group-hover:opacity-100"
+              onClick={() => setIsEditing(true)}
+            >
+              <Sparkles className="h-3 w-3" />Edit Script
+            </Button>
+          </div>
+        )}
+      </div>
+      <div className="p-3 border-t border-purple-500/10">
+        <div className="text-[10px] text-muted-foreground text-center mb-2">Uses 1 credit</div>
+        <Button
+          size="sm"
+          onClick={() => onGenerate(editedScript)}
+          disabled={generating || !editedScript.trim()}
+          className="w-full gap-1 bg-purple-600 hover:bg-purple-700"
+        >
+          {generating && generatingType === 'generate_audio' ? (
+            <><Loader2 className="h-3 w-3 animate-spin" />Generating...</>
+          ) : (
+            <><Sparkles className="h-3 w-3" />Generate Voiceover</>
+          )}
+        </Button>
+      </div>
     </div>
   )
 }
