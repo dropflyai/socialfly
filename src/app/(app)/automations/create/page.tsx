@@ -98,6 +98,8 @@ export default function CreateAutomationPage() {
   const [painPoints, setPainPoints] = useState('')
   const [industry, setIndustry] = useState('')
   const [contentExamples, setContentExamples] = useState('')
+  const [contentFormat, setContentFormat] = useState<'image' | 'video' | 'text'>('image')
+  const [includeVoiceover, setIncludeVoiceover] = useState(false)
   const [mediaSource, setMediaSource] = useState<'ai' | 'library' | 'none'>('ai')
   const [mediaPool, setMediaPool] = useState<{ id: string; url: string; name: string }[]>([])
   const [availableMedia, setAvailableMedia] = useState<{ id: string; url: string; name: string }[]>([])
@@ -148,8 +150,11 @@ export default function CreateAutomationPage() {
       const config: Record<string, unknown> = {
         topics: topics.split(',').map(t => t.trim()).filter(Boolean),
         tone,
-        includeImages: mediaSource === 'ai',
-        mediaSource,
+        contentFormat,
+        includeImages: contentFormat !== 'text',
+        includeVideo: contentFormat === 'video',
+        includeVoiceover: contentFormat === 'video' && includeVoiceover,
+        mediaSource: contentFormat === 'text' ? 'none' : mediaSource,
         mediaPool: mediaSource === 'library' ? mediaPool.map(m => ({ id: m.id, url: m.url })) : undefined,
         autoPublish,
         contentExamples: contentExamples || undefined,
@@ -374,33 +379,56 @@ export default function CreateAutomationPage() {
             />
           </div>
 
-          {/* Media source */}
+          {/* Content format */}
           <div className="space-y-2">
-            <Label>Images for posts</Label>
+            <Label>Post format</Label>
             <div className="grid gap-2">
               <button
-                onClick={() => setMediaSource('ai')}
-                className={`p-3 rounded-lg border text-left transition-all ${mediaSource === 'ai' ? 'ring-2 ring-primary bg-primary/5' : 'hover:border-primary/50'}`}
+                onClick={() => { setContentFormat('video'); setMediaSource('ai') }}
+                className={`p-3 rounded-lg border text-left transition-all ${contentFormat === 'video' ? 'ring-2 ring-primary bg-primary/5' : 'hover:border-primary/50'}`}
               >
-                <p className="text-sm font-medium">AI-generated images</p>
-                <p className="text-xs text-muted-foreground">AI creates a unique image for each post (5 credits each)</p>
+                <p className="text-sm font-medium">AI Video with Voiceover</p>
+                <p className="text-xs text-muted-foreground">Generate image → animate to video → add voiceover → merge with captions (57 credits each)</p>
               </button>
               <button
-                onClick={() => { setMediaSource('library'); loadMediaLibrary() }}
-                className={`p-3 rounded-lg border text-left transition-all ${mediaSource === 'library' ? 'ring-2 ring-primary bg-primary/5' : 'hover:border-primary/50'}`}
+                onClick={() => { setContentFormat('image'); setMediaSource('ai') }}
+                className={`p-3 rounded-lg border text-left transition-all ${contentFormat === 'image' ? 'ring-2 ring-primary bg-primary/5' : 'hover:border-primary/50'}`}
               >
-                <p className="text-sm font-medium">My media library</p>
-                <p className="text-xs text-muted-foreground">Pick images from your uploads to rotate through</p>
+                <p className="text-sm font-medium">AI Image Post</p>
+                <p className="text-xs text-muted-foreground">AI generates a unique image for each post (6 credits each)</p>
               </button>
               <button
-                onClick={() => setMediaSource('none')}
-                className={`p-3 rounded-lg border text-left transition-all ${mediaSource === 'none' ? 'ring-2 ring-primary bg-primary/5' : 'hover:border-primary/50'}`}
+                onClick={() => { setContentFormat('image'); setMediaSource('library'); loadMediaLibrary() }}
+                className={`p-3 rounded-lg border text-left transition-all ${contentFormat === 'image' && mediaSource === 'library' ? 'ring-2 ring-primary bg-primary/5' : 'hover:border-primary/50'}`}
               >
-                <p className="text-sm font-medium">Text only</p>
-                <p className="text-xs text-muted-foreground">No images — just text posts</p>
+                <p className="text-sm font-medium">My Media Library</p>
+                <p className="text-xs text-muted-foreground">Rotate through your uploaded images (1 credit each)</p>
+              </button>
+              <button
+                onClick={() => { setContentFormat('text'); setMediaSource('none') }}
+                className={`p-3 rounded-lg border text-left transition-all ${contentFormat === 'text' ? 'ring-2 ring-primary bg-primary/5' : 'hover:border-primary/50'}`}
+              >
+                <p className="text-sm font-medium">Text Only</p>
+                <p className="text-xs text-muted-foreground">No images or video — just text posts (1 credit each)</p>
               </button>
             </div>
           </div>
+
+          {/* Voiceover toggle for video */}
+          {contentFormat === 'video' && (
+            <div className="flex items-center justify-between p-3 rounded-lg border">
+              <div>
+                <p className="text-sm font-medium">Include Voiceover</p>
+                <p className="text-xs text-muted-foreground">ElevenLabs AI narrates the caption (+1 credit)</p>
+              </div>
+              <button
+                onClick={() => setIncludeVoiceover(!includeVoiceover)}
+                className={`w-10 h-6 rounded-full transition-colors ${includeVoiceover ? 'bg-primary' : 'bg-muted'}`}
+              >
+                <div className={`w-4 h-4 rounded-full bg-white transition-transform mx-1 ${includeVoiceover ? 'translate-x-4' : ''}`} />
+              </button>
+            </div>
+          )}
 
           {/* Media pool picker */}
           {mediaSource === 'library' && (
@@ -642,8 +670,12 @@ export default function CreateAutomationPage() {
                 <span>{schedules.find(s => s.id === selectedSchedule)?.name}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">AI Images</span>
-                <span>{includeImages ? 'Yes' : 'No'}</span>
+                <span className="text-muted-foreground">Format</span>
+                <span className="capitalize">{contentFormat === 'video' ? `Video${includeVoiceover ? ' + Voiceover' : ''}` : contentFormat === 'image' ? 'Image Post' : 'Text Only'}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Est. credits/post</span>
+                <span>{contentFormat === 'video' ? (includeVoiceover ? '~58' : '~57') : contentFormat === 'image' ? '~6' : '1'}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Publishing</span>

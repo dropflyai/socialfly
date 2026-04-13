@@ -422,36 +422,124 @@ Return valid JSON:
 
   const postText = generated.variants?.[platforms[0]]?.text || generated.text
   const mediaUrls: string[] = []
+  let mediaType: string | undefined = undefined
+  const includeVideo = !!(config.includeVideo)
+  const includeVoiceover = !!(config.includeVoiceover)
+
+  // Step 1: Generate or select an image
+  let imageUrl: string | null = null
 
   if (mediaSource === 'library' && userMediaPool.length > 0) {
-    // Pick a random image from the user's media pool
     const randomIndex = Math.floor(Math.random() * userMediaPool.length)
-    mediaUrls.push(userMediaPool[randomIndex].url)
-  } else if (mediaSource === 'ai' && generated.imagePrompt) {
-    // Generate AI image
+    imageUrl = userMediaPool[randomIndex].url
+  } else if (mediaSource !== 'none' && generated.imagePrompt) {
     try {
       await deductCredits(rule.user_id, 'image_generate', { automation_rule_id: rule.id })
-
       const { fal } = await import('@fal-ai/client')
       fal.config({ credentials: process.env.FAL_KEY })
-
       const imgResult = await fal.subscribe('fal-ai/flux/schnell', {
-        input: {
-          prompt: generated.imagePrompt,
-          image_size: { width: 1080, height: 1080 },
-          num_images: 1,
-        },
+        input: { prompt: generated.imagePrompt, image_size: { width: 1080, height: 1080 }, num_images: 1 },
       })
-
       const images = (imgResult.data as { images?: { url: string }[] }).images
-      if (images?.[0]?.url) {
-        mediaUrls.push(images[0].url)
-      }
+      if (images?.[0]?.url) imageUrl = images[0].url
     } catch (imgErr) {
       console.error('Automation image generation failed:', imgErr)
     }
   }
-  // mediaSource === 'none' — no image, text only
+
+  // Step 2: If video mode, animate the image into a video
+  let videoUrl: string | null = null
+
+  if (includeVideo && imageUrl) {
+    try {
+      await deductCredits(rule.user_id, 'video_quality', { automation_rule_id: rule.id })
+      const { fal } = await import('@fal-ai/client')
+      fal.config({ credentials: process.env.FAL_KEY })
+
+      const platform = platforms[0] || 'instagram'
+      const aspectRatio = (platform === 'instagram' || platform === 'tiktok') ? '9:16' : '16:9'
+
+      console.log(`[Automation] Generating video from image for rule ${rule.id}...`)
+      const videoResult = await fal.subscribe('fal-ai/kling-video/v1/standard/image-to-video', {
+        input: {
+          prompt: postText.slice(0, 200),
+          image_url: imageUrl,
+          duration: '5' as const,
+        },
+        pollInterval: 5000,
+        timeout: 270000,
+      })
+
+      const vData = videoResult.data as Record<string, unknown>
+      if (vData.video && typeof vData.video === 'object' && 'url' in (vData.video as Record<string, unknown>)) {
+        videoUrl = (vData.video as { url: string }).url
+      } else if (typeof vData.url === 'string') {
+        videoUrl = vData.url
+      }
+      console.log(`[Automation] Video generated: ${videoUrl ? 'success' : 'failed'}`)
+    } catch (vidErr) {
+      console.error('Automation video generation failed:', vidErr)
+    }
+  }
+
+  // Step 3: If voiceover enabled, generate audio
+  let audioUrl: string | null = null
+
+  if (includeVoiceover && videoUrl) {
+    try {
+      await deductCredits(rule.user_id, 'caption', { automation_rule_id: rule.id })
+      const { smartGenerateAudio } = await import('@/lib/engine/audio-router')
+      const audioResult = await smartGenerateAudio({ text: postText.slice(0, 500), style: 'voiceover' }, rule.user_id)
+      audioUrl = audioResult.url
+      console.log(`[Automation] Voiceover generated: ${audioUrl}`)
+    } catch (audioErr) {
+      console.error('Automation voiceover generation failed:', audioErr)
+    }
+  }
+
+  // Step 4: If we have video + audio, merge with Creatomate
+  let finalVideoUrl: string | null = null
+
+  if (videoUrl && (audioUrl || postText)) {
+    try {
+      const { createFinalVideo, checkComposeStatus } = await import('@/lib/engine/video-composer')
+      const platform = platforms[0] || 'instagram'
+      const aspectRatio = (platform === 'instagram' || platform === 'tiktok') ? '9:16' : '16:9'
+
+      const render = await createFinalVideo(videoUrl, {
+        audioUrl: audioUrl || undefined,
+        captionText: postText.slice(0, 100),
+        brandName: brand?.name,
+        aspectRatio,
+      })
+
+      // Poll for completion (up to 2 minutes)
+      for (let i = 0; i < 24; i++) {
+        await new Promise(r => setTimeout(r, 5000))
+        const status = await checkComposeStatus(render.id)
+        if (status.status === 'succeeded') {
+          finalVideoUrl = status.url
+          break
+        }
+        if (status.status === 'failed') break
+      }
+      console.log(`[Automation] Final video composed: ${finalVideoUrl ? 'success' : 'failed'}`)
+    } catch (composeErr) {
+      console.error('Automation video compose failed:', composeErr)
+    }
+  }
+
+  // Determine what media to attach to the post
+  if (finalVideoUrl) {
+    mediaUrls.push(finalVideoUrl)
+    mediaType = 'video'
+  } else if (videoUrl) {
+    mediaUrls.push(videoUrl)
+    mediaType = 'video'
+  } else if (imageUrl) {
+    mediaUrls.push(imageUrl)
+    mediaType = 'image'
+  }
 
   // Save as scheduled post or draft
   // Drafts still need a scheduled_for date (DB constraint) — set far future so cron doesn't pick them up
@@ -470,7 +558,7 @@ Return valid JSON:
       custom_content: {
         text: postText,
         media_urls: mediaUrls,
-        media_type: mediaUrls.length > 0 ? 'image' : undefined,
+        media_type: mediaType || (mediaUrls.length > 0 ? 'image' : undefined),
         automation_rule_id: rule.id,
         automation_type: type,
         variants: generated.variants,
