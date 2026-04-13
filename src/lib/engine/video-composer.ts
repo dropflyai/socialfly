@@ -11,7 +11,7 @@
  * Uses Creatomate's JSON-based render API.
  */
 
-const CREATOMATE_API = 'https://api.creatomate.com/v2'
+const CREATOMATE_API = 'https://api.creatomate.com/v1'
 
 function getApiKey(): string {
   const key = process.env.CREATOMATE_API_KEY
@@ -204,10 +204,12 @@ function buildCompositionPayload(req: ComposeRequest) {
   }
 
   return {
-    output_format: 'mp4',
-    width,
-    height,
-    elements,
+    source: {
+      output_format: 'mp4',
+      width,
+      height,
+      elements,
+    },
   }
 }
 
@@ -239,12 +241,12 @@ export async function composeVideo(req: ComposeRequest): Promise<ComposeResult> 
 
   const data = await res.json()
 
-  // API returns an array of renders
+  // v1 API returns an array of renders
   const render = Array.isArray(data) ? data[0] : data
 
   return {
     id: render.id,
-    status: render.status,
+    status: render.status || 'planned',
     url: render.url,
     snapshotUrl: render.snapshot_url,
   }
@@ -313,6 +315,54 @@ export async function addCaptionsToVideo(
     brandName: options?.brandName,
     ctaText: options?.ctaText,
     aspectRatio: (options?.aspectRatio || '16:9') as ComposeRequest['aspectRatio'],
+  })
+}
+
+// ============================================================================
+// Platform Presets — pre-configured compositions for each social platform
+// ============================================================================
+
+export async function createSocialReel(videoUrl: string, audioUrl?: string, captionText?: string, brandName?: string, ctaText?: string): Promise<ComposeResult> {
+  return composeVideo({
+    videoUrl, audioUrl,
+    audioVolume: audioUrl ? 100 : undefined,
+    videoVolume: audioUrl ? 0 : 100,
+    captionText, brandName, ctaText,
+    captionPosition: 'bottom', captionStyle: 'bold',
+    aspectRatio: '9:16',
+  })
+}
+
+export async function createYouTubeShort(videoUrl: string, audioUrl?: string, captionText?: string, brandName?: string): Promise<ComposeResult> {
+  return composeVideo({
+    videoUrl, audioUrl,
+    audioVolume: audioUrl ? 100 : undefined,
+    videoVolume: audioUrl ? 0 : 100,
+    captionText, brandName,
+    captionPosition: 'top', captionStyle: 'bold',
+    aspectRatio: '9:16',
+  })
+}
+
+export async function createFeedPost(videoUrl: string, audioUrl?: string, captionText?: string, brandName?: string): Promise<ComposeResult> {
+  return composeVideo({
+    videoUrl, audioUrl,
+    audioVolume: audioUrl ? 100 : undefined,
+    videoVolume: audioUrl ? 0 : 100,
+    captionText, brandName,
+    captionPosition: 'bottom', captionStyle: 'subtitle',
+    aspectRatio: '1:1',
+  })
+}
+
+export async function createLinkedInVideo(videoUrl: string, audioUrl?: string, captionText?: string, brandName?: string): Promise<ComposeResult> {
+  return composeVideo({
+    videoUrl, audioUrl,
+    audioVolume: audioUrl ? 100 : undefined,
+    videoVolume: audioUrl ? 0 : 100,
+    captionText, brandName,
+    captionPosition: 'bottom', captionStyle: 'minimal',
+    aspectRatio: '16:9',
   })
 }
 
