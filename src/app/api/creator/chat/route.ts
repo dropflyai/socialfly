@@ -80,9 +80,12 @@ export async function POST(request: NextRequest) {
     .limit(20)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const imageAssets = (userMedia || []).filter((m: any) => m.asset_type === 'image')
   const mediaLibraryInfo = userMedia?.length
-    ? `User has ${userMedia.length} media files. Recent: ${userMedia.slice(0, 3).map((m: any) => `"${m.title || 'untitled'}" (${m.asset_type})`).join(', ')}.`
-    : ''
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ? `User has ${userMedia.length} media files (${imageAssets.length} images). Recent images that could be animated into videos: ${imageAssets.slice(0, 5).map((m: any) => `"${m.title || 'untitled'}"`).join(', ')}${imageAssets.length === 0 ? ' (no images yet)' : ''}.`
+    : 'User has no media uploaded yet.'
 
   const videoModels = getAvailableVideoModels()
 
@@ -112,22 +115,26 @@ ${brands.length > 1 ? `- The user has multiple brands. If they mention a brand n
 - Once they pick a brand, remember it for the rest of the conversation.` : brands.length === 1 ? `- User has one brand: "${brands[0].name}". Use its voice and style automatically.` : '- No brand profiles set up yet. Create content with a general professional tone.'}
 
 VIDEO CREATION STRATEGY — IMPORTANT:
-When a user wants a VIDEO, use the "image-first" approach:
-1. First, create a beautiful still image that captures the key frame of the scene
-2. Let the user see and approve the image
-3. THEN animate that image into a video using image-to-video generation
+When a user wants a VIDEO, always start from an IMAGE:
 
-Why: Image-to-video produces dramatically better results than text-to-video because the model has a visual anchor. The user also gets to approve the look before spending video credits.
+OPTION A — User has media selected or uploaded:
+- Go straight to animate. Output type: "video" with their image as the reference.
+- Say: "Let's animate your image into a video! What kind of motion do you want?"
 
-Flow:
-- User: "I want a video of my coffee shop"
-- You: Extract the scene brief → output a generate_image action first
-- User approves the image
-- You: "Great! Now let's bring it to life." → output a generate_video action with the image URL
+OPTION B — User has images in their media library:
+- PROACTIVELY suggest: "I see you have some images in your library — want to animate one of those into a video? Or should I create a fresh image first?"
+- If they pick a library image, go straight to animate (type: "video")
 
-The ONLY exception is when the user already has an image selected (from media library or upload). In that case, go straight to animate.
+OPTION C — No existing images:
+- Generate an AI image first (the "key frame"), let them approve, then animate
+- Output type: "image" with "videoIntent": true
+- Say: "Let me first create the perfect frame for your video, then we'll bring it to life."
+
+PRIORITY ORDER: Always check for existing media first (A → B → C). Using the user's own images makes the content more authentic and personal.
 
 When outputting the image-first brief, add "videoIntent": true so the frontend knows this image will become a video.
+
+The ONLY time to use direct text-to-video (no image) is if the user explicitly asks for it or the scene can't be captured in a single frame (e.g., a complex motion sequence).
 
 CONVERSATION RULES:
 - Be friendly and brief — 1-3 sentences per message
