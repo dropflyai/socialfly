@@ -111,6 +111,24 @@ ${brands.length > 1 ? `- The user has multiple brands. If they mention a brand n
 - Include the brand name in the brief so we use the right voice.
 - Once they pick a brand, remember it for the rest of the conversation.` : brands.length === 1 ? `- User has one brand: "${brands[0].name}". Use its voice and style automatically.` : '- No brand profiles set up yet. Create content with a general professional tone.'}
 
+VIDEO CREATION STRATEGY — IMPORTANT:
+When a user wants a VIDEO, use the "image-first" approach:
+1. First, create a beautiful still image that captures the key frame of the scene
+2. Let the user see and approve the image
+3. THEN animate that image into a video using image-to-video generation
+
+Why: Image-to-video produces dramatically better results than text-to-video because the model has a visual anchor. The user also gets to approve the look before spending video credits.
+
+Flow:
+- User: "I want a video of my coffee shop"
+- You: Extract the scene brief → output a generate_image action first
+- User approves the image
+- You: "Great! Now let's bring it to life." → output a generate_video action with the image URL
+
+The ONLY exception is when the user already has an image selected (from media library or upload). In that case, go straight to animate.
+
+When outputting the image-first brief, add "videoIntent": true so the frontend knows this image will become a video.
+
 CONVERSATION RULES:
 - Be friendly and brief — 1-3 sentences per message
 - Don't overwhelm with options
@@ -179,6 +197,38 @@ REFINEMENT — when user says "make it warmer" or "change the camera":
 \`\`\`
 
 You don't need ALL fields — just the ones you can extract. But the more specific you are on subject, action, and setting, the better the video will be.
+
+IMAGE-FIRST VIDEO FLOW:
+When the user wants a video and doesn't already have an image selected, set type to "image" and add "videoIntent": true in the brief. This tells the system to generate the key frame image first, then animate it.
+
+Example for video request:
+\`\`\`json
+{
+  "ready": true,
+  "brief": {
+    "type": "image",
+    "videoIntent": true,
+    "subject": "steaming latte being poured...",
+    ...other scene fields...
+  },
+  "description": "First we'll create the perfect frame, then animate it into a video"
+}
+\`\`\`
+
+When the user already has an image selected (mediaContext exists), set type to "video" directly — skip image generation.
+
+After the user approves the generated image and says to animate/proceed, output:
+\`\`\`json
+{
+  "ready": true,
+  "brief": {
+    "type": "video",
+    "action": "describe the motion/animation to apply",
+    ...scene fields...
+  },
+  "description": "Animating the approved image into a cinematic video"
+}
+\`\`\`
 
 AVAILABLE MODELS (for your reference, don't tell user):
 ${videoModels.map(m => `- ${m.name}: ${m.bestFor}`).join('\n')}
@@ -250,8 +300,13 @@ DO NOT write the generation prompt. Capture the SCENE. Our engine writes the pro
             brief.aspectRatio = getAspectRatioForPlatform(brief.platform)
           }
 
-          // Build the full optimized prompt (includes negative prompt, model selection)
-          const fullPrompt = buildFullPrompt(brief)
+          // Handle videoIntent — image-first video flow
+          const videoIntent = !!(parsed.brief.videoIntent)
+          const isImageFirst = videoIntent && brief.type === 'image'
+
+          // For image-first flow, build an image prompt from the scene
+          // For direct video, build a video prompt
+          const fullPrompt = buildFullPrompt(isImageFirst ? { ...brief, type: 'image' } : brief)
 
           action = {
             action: brief.type === 'image' ? 'generate_image' : 'generate_video',
@@ -261,6 +316,7 @@ DO NOT write the generation prompt. Capture the SCENE. Our engine writes the pro
             imageUrl: brief.referenceImageUrl || null,
             aspectRatio: fullPrompt.aspectRatio,
             duration: String(fullPrompt.duration),
+            videoIntent, // Tell frontend this image should become a video
             brief, // Pass the full brief so the frontend can show it and we can refine later
             description: parsed.description,
             cacheKey: fullPrompt.cacheKey,

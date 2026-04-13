@@ -25,6 +25,7 @@ interface ChatMessage {
     suggestion?: string
     description?: string
     cacheKey?: string
+    videoIntent?: boolean
     brief?: {
       subject?: string
       subjectDetails?: string
@@ -656,14 +657,27 @@ export default function CreatorPage() {
                         <RefreshCw className="h-3 w-3" />
                       </Button>
                     </div>
+                    {/* Animate to Video — for image-first video flow */}
+                    {msg.generatedMedia.type === 'image' && messages.some(m => m.action?.videoIntent) && (
+                      <Button
+                        size="sm"
+                        className="w-full h-8 gap-1 text-xs bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white"
+                        onClick={() => {
+                          setSelectedMedia({ id: 'generated', name: 'AI Generated Image', url: msg.generatedMedia!.url, type: 'image' })
+                          sendMessage("This looks great — animate it into a video!")
+                        }}
+                      >
+                        <Play className="h-3 w-3" />Animate to Video
+                      </Button>
+                    )}
                     {/* Post This */}
-                    <Button size="sm" className="w-full h-8 gap-1 text-xs" onClick={() => {
+                    <Button size="sm" className={`w-full h-8 gap-1 text-xs ${msg.generatedMedia.type === 'image' && messages.some(m => m.action?.videoIntent) ? '' : ''}`} onClick={() => {
                       setPostMediaUrl(msg.generatedMedia!.url)
                       setPostMediaType(msg.generatedMedia!.type)
                       setPostCaption('')
                       setShowPostFlow(true)
                     }}>
-                      <Send className="h-3 w-3" />Post This
+                      <Send className="h-3 w-3" />Post {msg.generatedMedia.type === 'image' && messages.some(m => m.action?.videoIntent) ? 'Image Only' : 'This'}
                     </Button>
                   </div>
                 </div>
