@@ -27,17 +27,26 @@ interface ChatMessage {
     cacheKey?: string
     brief?: {
       subject?: string
-      mood?: string
-      style?: string
-      cameraAngle?: string
+      subjectDetails?: string
+      action?: string
+      motionDirection?: string
+      setting?: string
+      timeOfDay?: string
+      shotSize?: string
       cameraMovement?: string
       cameraSpeed?: string
+      cameraHeight?: string
+      mood?: string
+      style?: string
+      colorGrade?: string
       lighting?: string
-      colorPalette?: string
+      lightDirection?: string
+      lensStyle?: string
       platform?: string
       purpose?: string
       avoid?: string[]
       styleReference?: string
+      brandName?: string
       [key: string]: unknown
     }
   } | null
@@ -536,33 +545,36 @@ export default function CreatorPage() {
                     <Badge variant="secondary" className="text-[10px] capitalize">{msg.action.model || 'auto'}</Badge>
                   </div>
 
-                  {/* Visual brief details */}
+                  {/* Scene brief details */}
                   {msg.action.brief && (
-                    <div className="px-3 py-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
-                      {msg.action.brief.mood && (
-                        <div><span className="text-muted-foreground">Mood:</span> <span className="font-medium">{msg.action.brief.mood}</span></div>
-                      )}
-                      {msg.action.brief.cameraAngle && (
-                        <div><span className="text-muted-foreground">Camera:</span> <span className="font-medium">{msg.action.brief.cameraAngle}</span></div>
-                      )}
-                      {msg.action.brief.cameraMovement && (
-                        <div><span className="text-muted-foreground">Movement:</span> <span className="font-medium">{msg.action.brief.cameraMovement}</span></div>
-                      )}
-                      {msg.action.brief.lighting && (
-                        <div><span className="text-muted-foreground">Lighting:</span> <span className="font-medium">{msg.action.brief.lighting}</span></div>
-                      )}
-                      {msg.action.brief.platform && (
-                        <div><span className="text-muted-foreground">Platform:</span> <span className="font-medium capitalize">{msg.action.brief.platform}</span></div>
-                      )}
-                      {msg.action.aspectRatio && (
-                        <div><span className="text-muted-foreground">Format:</span> <span className="font-medium">{msg.action.aspectRatio}</span></div>
-                      )}
-                      {msg.action.duration && msg.action.action === 'generate_video' && (
-                        <div><span className="text-muted-foreground">Duration:</span> <span className="font-medium">{msg.action.duration}s</span></div>
-                      )}
-                      {msg.action.brief.style && (
-                        <div><span className="text-muted-foreground">Style:</span> <span className="font-medium">{msg.action.brief.style}</span></div>
-                      )}
+                    <div className="px-3 py-2 space-y-1 text-[11px]">
+                      {/* Scene description row */}
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                        {msg.action.brief.shotSize && (
+                          <div><span className="text-muted-foreground">Shot:</span> <span className="font-medium">{msg.action.brief.shotSize}</span></div>
+                        )}
+                        {msg.action.brief.cameraMovement && (
+                          <div><span className="text-muted-foreground">Camera:</span> <span className="font-medium">{msg.action.brief.cameraSpeed ? `${msg.action.brief.cameraSpeed} ` : ''}{msg.action.brief.cameraMovement}</span></div>
+                        )}
+                        {msg.action.brief.mood && (
+                          <div><span className="text-muted-foreground">Mood:</span> <span className="font-medium">{msg.action.brief.mood}</span></div>
+                        )}
+                        {msg.action.brief.lighting && (
+                          <div><span className="text-muted-foreground">Light:</span> <span className="font-medium">{msg.action.brief.lighting}</span></div>
+                        )}
+                        {msg.action.brief.setting && (
+                          <div><span className="text-muted-foreground">Setting:</span> <span className="font-medium">{msg.action.brief.setting}</span></div>
+                        )}
+                        {msg.action.brief.colorGrade && (
+                          <div><span className="text-muted-foreground">Color:</span> <span className="font-medium">{msg.action.brief.colorGrade}</span></div>
+                        )}
+                        {msg.action.brief.platform && (
+                          <div><span className="text-muted-foreground">Platform:</span> <span className="font-medium capitalize">{msg.action.brief.platform}</span></div>
+                        )}
+                        {msg.action.aspectRatio && (
+                          <div><span className="text-muted-foreground">Format:</span> <span className="font-medium">{msg.action.aspectRatio}{msg.action.duration && msg.action.action === 'generate_video' ? ` · ${msg.action.duration}s` : ''}</span></div>
+                        )}
+                      </div>
                     </div>
                   )}
 
