@@ -17,6 +17,10 @@ interface ChatMessage {
     action: string
     prompt?: string
     negativePrompt?: string
+    script?: string
+    style?: string
+    voiceGender?: string
+    voiceTone?: string
     model?: string
     imageUrl?: string | null
     aspectRatio?: string
@@ -55,6 +59,10 @@ interface ChatMessage {
     type: 'video' | 'image'
     url: string
     model?: string
+  }
+  generatedAudio?: {
+    url: string
+    voiceName?: string
   }
 }
 
@@ -318,6 +326,29 @@ export default function CreatorPage() {
         }
         setGenerating(false)
         setGeneratingType(null)
+      } else if (action.action === 'generate_audio') {
+        const res = await fetch('/api/audio/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: action.script,
+            style: action.style || 'voiceover',
+          }),
+        })
+
+        if (res.ok) {
+          const data = await res.json()
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `Voiceover ready! Voice: ${data.voiceName || 'AI Voice'}`,
+            generatedAudio: { url: data.url, voiceName: data.voiceName },
+          }])
+        } else {
+          const err = await res.json()
+          setMessages(prev => [...prev, { role: 'assistant', content: `Audio generation failed: ${err.error}` }])
+        }
+        setGenerating(false)
+        setGeneratingType(null)
       }
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: 'Generation failed. Try again.' }])
@@ -528,8 +559,62 @@ export default function CreatorPage() {
                 <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
               </div>
 
+              {/* Audio action card */}
+              {msg.action?.action === 'generate_audio' && !msg.generatedAudio && (
+                <div className="mt-2 rounded-xl border bg-purple-500/5 overflow-hidden">
+                  <div className="p-3 border-b border-purple-500/10">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-purple-500" />
+                      <span className="text-xs font-medium">{msg.action.description || 'Voiceover'}</span>
+                      <Badge variant="secondary" className="text-[10px]">{msg.action.style || 'voiceover'}</Badge>
+                    </div>
+                  </div>
+                  <div className="p-3">
+                    <p className="text-sm italic text-muted-foreground mb-2">&quot;{msg.action.script}&quot;</p>
+                    <div className="text-[10px] text-muted-foreground mb-2">
+                      Voice: {msg.action.voiceTone || 'warm'} {msg.action.voiceGender || 'female'}
+                    </div>
+                  </div>
+                  <div className="p-3 border-t border-purple-500/10">
+                    <div className="text-[10px] text-muted-foreground text-center mb-2">Uses 1 credit</div>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={() => handleGenerate(msg.action)} disabled={generating} className="flex-1 gap-1 bg-purple-600 hover:bg-purple-700">
+                        {generating && generatingType === 'generate_audio' ? (
+                          <><Loader2 className="h-3 w-3 animate-spin" />Generating...</>
+                        ) : (
+                          <><Sparkles className="h-3 w-3" />Generate Voiceover</>
+                        )}
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => sendMessage('Change the script —')}>Adjust</Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Audio player */}
+              {msg.generatedAudio && (
+                <div className="mt-2 rounded-xl border bg-purple-500/5 p-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-purple-500" />
+                    <span className="text-xs font-medium">Voiceover</span>
+                    {msg.generatedAudio.voiceName && <Badge variant="secondary" className="text-[10px]">{msg.generatedAudio.voiceName}</Badge>}
+                  </div>
+                  <audio src={msg.generatedAudio.url} controls className="w-full h-8" />
+                  <div className="flex gap-1">
+                    <Button size="sm" variant="outline" className="h-7 gap-1 text-xs flex-1" asChild>
+                      <a href={msg.generatedAudio.url} download="voiceover.mp3" target="_blank" rel="noopener noreferrer">
+                        <Download className="h-3 w-3" />Download Audio
+                      </a>
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs" onClick={() => sendMessage('Try a different voice or script')}>
+                      <RefreshCw className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {/* Creative brief + generate button */}
-              {msg.action && !msg.generatedMedia && (
+              {msg.action && msg.action.action !== 'generate_audio' && !msg.generatedMedia && !msg.generatedAudio && (
                 <div className="mt-2 rounded-xl border bg-primary/5 overflow-hidden">
                   {/* Brief header */}
                   <div className="p-3 flex items-center justify-between border-b border-primary/10">
@@ -657,6 +742,17 @@ export default function CreatorPage() {
                         <RefreshCw className="h-3 w-3" />
                       </Button>
                     </div>
+                    {/* Add Voiceover — for videos */}
+                    {msg.generatedMedia.type === 'video' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full h-8 gap-1 text-xs"
+                        onClick={() => sendMessage("Add a voiceover to this video — write a script based on what it shows")}
+                      >
+                        <Sparkles className="h-3 w-3" />Add Voiceover
+                      </Button>
+                    )}
                     {/* Animate to Video — for image-first video flow */}
                     {msg.generatedMedia.type === 'image' && messages.some(m => m.action?.videoIntent) && (
                       <Button

@@ -237,6 +237,26 @@ After the user approves the generated image and says to animate/proceed, output:
 }
 \`\`\`
 
+VOICEOVER / AUDIO:
+When the user asks to add a voiceover or narration to a video, write a short punchy script (2-4 sentences, 5-10 seconds of speech) and output:
+\`\`\`json
+{
+  "ready": true,
+  "audio": true,
+  "brief": {
+    "type": "audio",
+    "script": "The voiceover script text — write it punchy and engaging for social media",
+    "style": "voiceover | narration | ad_read",
+    "voiceGender": "male | female",
+    "voiceTone": "warm | authoritative | friendly | energetic",
+    "brandName": "brand name if relevant"
+  },
+  "description": "Adding a voiceover narration"
+}
+\`\`\`
+
+Keep voiceover scripts SHORT for social media — 2-4 sentences max. Write them to match the video's mood and the brand's voice.
+
 AVAILABLE MODELS (for your reference, don't tell user):
 ${videoModels.map(m => `- ${m.name}: ${m.bestFor}`).join('\n')}
 
@@ -265,7 +285,17 @@ DO NOT write the generation prompt. Capture the SCENE. Our engine writes the pro
       try {
         const parsed = JSON.parse(jsonMatch[1])
 
-        if (parsed.ready && parsed.brief) {
+        if (parsed.ready && parsed.audio && parsed.brief) {
+          // Audio generation — voiceover/narration
+          action = {
+            action: 'generate_audio',
+            script: parsed.brief.script,
+            style: parsed.brief.style || 'voiceover',
+            voiceGender: parsed.brief.voiceGender || 'female',
+            voiceTone: parsed.brief.voiceTone || 'warm',
+            description: parsed.description,
+          }
+        } else if (parsed.ready && parsed.brief) {
           // ============================================================
           // STAGE 2: Prompt Engineer — build model-specific prompt
           // ============================================================
