@@ -247,7 +247,7 @@ export function buildFullPrompt(brief: CreativeBrief, modelOverride?: string): B
   let prompt: string
 
   if (brief.type === 'image') {
-    prompt = writeImageScene(brief)
+    prompt = writeImageScene(brief, model)
   } else {
     const rawScene = writeScene(brief)
 
@@ -277,21 +277,112 @@ export function buildPromptFromBrief(brief: CreativeBrief, model?: string): stri
   return buildFullPrompt(brief, model).prompt
 }
 
-function writeImageScene(brief: CreativeBrief): string {
+// ============================================================================
+// Image Scene Writers — model-specific
+// ============================================================================
+
+/**
+ * Write a natural language image scene description.
+ * Used for Gemini and DALL-E which prefer descriptive prose.
+ */
+function writeImageSceneNatural(brief: CreativeBrief): string {
+  const sentences: string[] = []
+
+  // Opening — what we're looking at
+  const shotDesc = brief.shotSize ? `${brief.shotSize} ` : ''
+  const styleDesc = brief.style ? `${brief.style} ` : ''
+  sentences.push(`A ${styleDesc}${shotDesc}photograph of ${subjectPhrase(brief)}`)
+
+  // Action and setting
+  if (brief.action) sentences[0] += ` ${brief.action}`
+  if (brief.setting) sentences.push(`set in ${brief.setting}`)
+  if (brief.timeOfDay) sentences[sentences.length - 1] += ` during ${brief.timeOfDay}`
+
+  // Lighting — describe it cinematically
+  if (brief.lighting) {
+    const dir = brief.lightDirection ? ` from the ${brief.lightDirection}` : ''
+    sentences.push(`${brief.lighting}${dir} creates a ${brief.mood || 'beautiful'} atmosphere`)
+  } else if (brief.mood) {
+    sentences.push(`the scene has a ${brief.mood} feel`)
+  }
+
+  // Technical details woven in naturally
+  if (brief.lensStyle) sentences.push(`shot with ${brief.lensStyle}`)
+  if (brief.colorGrade) sentences.push(`with ${brief.colorGrade}`)
+  if (brief.setting && !sentences.some(s => s.includes(brief.setting!))) sentences.push(`with a ${brief.setting} background`)
+
+  sentences.push('professional quality, highly detailed, 4K resolution')
+
+  return sentences.join(', ')
+}
+
+/**
+ * Write a keyword-structured image prompt.
+ * Used for Flux/Fal and Stability which prefer structured keywords.
+ */
+function writeImageSceneStructured(brief: CreativeBrief): string {
   const parts: string[] = []
 
+  // Subject first — most important for these models
+  parts.push(subjectPhrase(brief))
+  if (brief.action) parts.push(brief.action)
+
+  // Setting and context
+  if (brief.setting) parts.push(brief.setting)
+  // setting already captured above
+  if (brief.timeOfDay) parts.push(`${brief.timeOfDay} light`)
+
+  // Visual style block
   if (brief.style) parts.push(`${brief.style} style`)
   if (brief.shotSize) parts.push(`${brief.shotSize} shot`)
-  parts.push(`of ${subjectPhrase(brief)}`)
-  if (brief.action) parts.push(brief.action)
-  parts.push(settingPhrase(brief))
-  parts.push(lightingPhrase(brief))
-  if (brief.mood) parts.push(`${brief.mood} atmosphere`)
-  if (brief.colorGrade) parts.push(`${brief.colorGrade} color grade`)
+  if (brief.lighting) parts.push(`${brief.lighting} lighting`)
+  if (brief.lightDirection) parts.push(`${brief.lightDirection} light`)
+  if (brief.colorGrade) parts.push(brief.colorGrade)
+  if (brief.mood) parts.push(`${brief.mood} mood`)
   if (brief.lensStyle) parts.push(brief.lensStyle)
-  parts.push('high quality, professional, detailed, 4K')
+
+  // Quality keywords these models respond to
+  parts.push('masterpiece', 'best quality', 'highly detailed', 'sharp focus', '8k uhd')
 
   return parts.join(', ')
+}
+
+/**
+ * Content-type aware image scene — picks the right photography style.
+ */
+function writeImageScene(brief: CreativeBrief, model?: string): string {
+  const contentType = detectContentType(brief)
+
+  // Add content-type specific quality keywords
+  let suffix = ''
+  switch (contentType) {
+    case 'food_beverage':
+      suffix = ', food photography, appetizing, editorial quality, magazine cover worthy'
+      break
+    case 'product_showcase':
+      suffix = ', product photography, clean background, studio lighting, commercial quality'
+      break
+    case 'lifestyle':
+      suffix = ', lifestyle photography, authentic, candid, editorial'
+      break
+    case 'nature_landscape':
+      suffix = ', landscape photography, epic, breathtaking, national geographic quality'
+      break
+    case 'brand_story':
+      suffix = ', portrait photography, emotional, storytelling, editorial'
+      break
+    case 'social_reel':
+      suffix = ', social media ready, eye-catching, vibrant, scroll-stopping'
+      break
+  }
+
+  // Pick prompt style based on model
+  if (model === 'nanobanana' || model === 'dalle') {
+    return writeImageSceneNatural(brief) + suffix
+  }
+
+  // Default to structured for Fal/Stability
+  return writeImageSceneStructured(brief) + suffix
 }
 
 export function getAspectRatioForPlatform(platform?: string): string {
