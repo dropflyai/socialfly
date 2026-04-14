@@ -15,10 +15,10 @@ import {
   Play,
   Clock,
   HardDrive,
+  ArrowRight,
   Tag,
   Wand2,
   Loader2,
-  ArrowRight,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardTitle } from '@/components/ui/card'
@@ -520,6 +520,88 @@ export default function MediaLibraryPage() {
                 )}
               </div>
             )}
+
+            {/* Quick Actions */}
+            <div className="space-y-2 pt-3 border-t">
+              <span className="text-sm font-medium">Quick Actions</span>
+              <div className="grid grid-cols-2 gap-2">
+                {/* Animate to Video — for images */}
+                {selectedAsset.type === 'image' && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5 text-xs"
+                    onClick={() => {
+                      setSelectedAsset(null)
+                      window.location.href = `/create`
+                      // Store in sessionStorage so Creator picks it up
+                      sessionStorage.setItem('creator_media', JSON.stringify({
+                        id: selectedAsset.id,
+                        name: selectedAsset.name,
+                        url: selectedAsset.url,
+                        type: selectedAsset.type,
+                        action: 'animate',
+                      }))
+                    }}
+                  >
+                    <Play className="h-3.5 w-3.5" />
+                    Animate to Video
+                  </Button>
+                )}
+
+                {/* Add Voiceover + Captions — for videos */}
+                {selectedAsset.type === 'video' && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5 text-xs"
+                    onClick={() => {
+                      setSelectedAsset(null)
+                      sessionStorage.setItem('creator_media', JSON.stringify({
+                        id: selectedAsset.id,
+                        name: selectedAsset.name,
+                        url: selectedAsset.url,
+                        type: selectedAsset.type,
+                        action: 'enhance',
+                      }))
+                      window.location.href = `/create`
+                    }}
+                  >
+                    <Wand2 className="h-3.5 w-3.5" />
+                    Add Voiceover & Captions
+                  </Button>
+                )}
+
+                {/* Use in AI Creator */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 text-xs"
+                  onClick={() => {
+                    setSelectedAsset(null)
+                    sessionStorage.setItem('creator_media', JSON.stringify({
+                      id: selectedAsset.id,
+                      name: selectedAsset.name,
+                      url: selectedAsset.url,
+                      type: selectedAsset.type,
+                      action: 'create',
+                    }))
+                    window.location.href = `/create`
+                  }}
+                >
+                  <ArrowRight className="h-3.5 w-3.5" />
+                  Open in AI Creator
+                </Button>
+
+                {/* Download */}
+                <Button size="sm" variant="outline" className="gap-1.5 text-xs" asChild>
+                  <a href={selectedAsset.url} download={selectedAsset.name} target="_blank" rel="noopener noreferrer">
+                    <HardDrive className="h-3.5 w-3.5" />
+                    Download
+                  </a>
+                </Button>
+              </div>
+            </div>
 
             <div className="flex justify-end gap-2">
               <Button

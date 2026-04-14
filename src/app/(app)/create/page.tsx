@@ -129,17 +129,43 @@ export default function CreatorPage() {
 
   // Send initial greeting and load data on mount
   useEffect(() => {
+    // Check if navigated from Media Library with a selected asset
+    let startupMessage: string | null = null
+    try {
+      const mediaJson = sessionStorage.getItem('creator_media')
+      if (mediaJson) {
+        sessionStorage.removeItem('creator_media')
+        const media = JSON.parse(mediaJson)
+        setSelectedMedia({ id: media.id, name: media.name, url: media.url, type: media.type })
+
+        if (media.action === 'animate') {
+          startupMessage = `I want to animate my image "${media.name}" into a video`
+        } else if (media.action === 'enhance') {
+          startupMessage = `I want to add a voiceover and captions to my video "${media.name}"`
+        } else {
+          startupMessage = `I want to create something with my ${media.type} "${media.name}"`
+        }
+      }
+    } catch { /* ignore */ }
+
     setMessages([{
       role: 'assistant',
-      content: "Hey! I'm your AI content creator. I can help you make videos, images, or turn your existing media into something new.\n\nWhat would you like to create today?",
+      content: startupMessage
+        ? `Hey! I see you brought "${selectedMedia?.name || 'your media'}" — let's work with it!`
+        : "Hey! I'm your AI content creator. I can help you make videos, images, or turn your existing media into something new.\n\nWhat would you like to create today?",
     }])
+
+    // Auto-send the startup message after a brief delay
+    if (startupMessage) {
+      setTimeout(() => sendMessage(startupMessage!), 500)
+    }
+
     // Load media library
     fetch('/api/media?type=all')
       .then(res => res.ok ? res.json() : null)
       .then(data => {
         if (data?.assets) {
           setAvailableMedia(data.assets.slice(0, 20))
-          // Show recent AI-generated content
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const aiGenerated = data.assets.filter((a: any) => a.name?.startsWith('AI ')).slice(0, 6)
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -149,6 +175,7 @@ export default function CreatorPage() {
       .catch(() => {})
     // Cleanup poll on unmount
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function sendMessage(text?: string) {
