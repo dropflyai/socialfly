@@ -435,10 +435,22 @@ Return valid JSON:
   } else if (mediaSource !== 'none' && generated.imagePrompt) {
     try {
       await deductCredits(rule.user_id, 'image_generate', { automation_rule_id: rule.id })
+
+      // Run through prompt engineer for model-specific optimization
+      const { buildFullPrompt } = await import('@/lib/engine/prompt-engineer')
+      const imageBrief = {
+        type: 'image' as const,
+        subject: generated.imagePrompt as string,
+        mood: userTone.toLowerCase(),
+        style: 'professional',
+        platform: platforms[0],
+      }
+      const optimizedPrompt = buildFullPrompt(imageBrief, 'fal')
+
       const { fal } = await import('@fal-ai/client')
       fal.config({ credentials: process.env.FAL_KEY })
       const imgResult = await fal.subscribe('fal-ai/flux/schnell', {
-        input: { prompt: generated.imagePrompt, image_size: { width: 1080, height: 1080 }, num_images: 1 },
+        input: { prompt: optimizedPrompt.prompt, image_size: { width: 1080, height: 1080 }, num_images: 1 },
       })
       const images = (imgResult.data as { images?: { url: string }[] }).images
       if (images?.[0]?.url) imageUrl = images[0].url
