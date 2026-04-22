@@ -113,13 +113,26 @@ export async function getTikTokProfile(
   return data.data.user
 }
 
-// Post video to TikTok using "pull from URL" method
+// Post video to TikTok via FILE_UPLOAD.
+//
+// We can't use PULL_FROM_URL because TikTok requires DNS-verified domain
+// ownership for the source URL, and our videos live on FAL's CDN (not a
+// domain we control). FILE_UPLOAD sidesteps that: we download the video
+// server-side and PUT the bytes to an upload_url TikTok gives us.
 export async function postTikTokVideo(
   accessToken: string,
   videoUrl: string,
   title: string
 ): Promise<TikTokPostResult> {
-  // Step 1: Initialize upload via pull from URL
+  // Download the video so we know its size (required by init) and can stream
+  // it to TikTok's upload URL.
+  const videoRes = await fetch(videoUrl)
+  if (!videoRes.ok) throw new Error(`Failed to download video from source: ${videoRes.status}`)
+  const videoBuffer = Buffer.from(await videoRes.arrayBuffer())
+  const videoSize = videoBuffer.byteLength
+
+  // Single-chunk upload. TikTok's 5MB minimum chunk size only applies when
+  // splitting into multiple chunks — a single chunk can be up to 64MB.
   const initRes = await fetch(`${TIKTOK_API_BASE}/post/publish/video/init/`, {
     method: 'POST',
     headers: {
@@ -128,15 +141,17 @@ export async function postTikTokVideo(
     },
     body: JSON.stringify({
       post_info: {
-        title: title.slice(0, 150), // TikTok title limit
+        title: title.slice(0, 150),
         privacy_level: TIKTOK_PRIVACY_LEVEL,
         disable_duet: false,
         disable_comment: false,
         disable_stitch: false,
       },
       source_info: {
-        source: 'PULL_FROM_URL',
-        video_url: videoUrl,
+        source: 'FILE_UPLOAD',
+        video_size: videoSize,
+        chunk_size: videoSize,
+        total_chunk_count: 1,
       },
     }),
   })
@@ -147,12 +162,30 @@ export async function postTikTokVideo(
   }
 
   const initData = await initRes.json()
-
-  if (initData.error?.code !== 'ok' && initData.error?.code) {
+  if (initData.error?.code && initData.error.code !== 'ok') {
     throw new Error(`TikTok error: ${initData.error.message}`)
   }
 
-  return { publish_id: initData.data.publish_id }
+  const { publish_id, upload_url } = initData.data
+  if (!upload_url) throw new Error('TikTok did not return an upload_url')
+
+  // PUT the video bytes. Content-Range is required for chunked upload; for a
+  // single chunk it covers the full file.
+  const uploadRes = await fetch(upload_url, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'video/mp4',
+      'Content-Range': `bytes 0-${videoSize - 1}/${videoSize}`,
+    },
+    body: videoBuffer,
+  })
+
+  if (!uploadRes.ok) {
+    const error = await uploadRes.text()
+    throw new Error(`TikTok video upload failed (${uploadRes.status}): ${error.slice(0, 300)}`)
+  }
+
+  return { publish_id }
 }
 
 // Post a photo to TikTok (photo mode)
