@@ -95,12 +95,21 @@ export async function refreshTikTokToken(
 export async function getTikTokProfile(
   accessToken: string
 ): Promise<TikTokProfile> {
-  const res = await fetch(`${TIKTOK_API_BASE}/user/info/?fields=open_id,display_name,avatar_url,username`, {
+  // `username` is gated behind the `user.info.profile` scope and will cause
+  // the request to fail when only `user.info.basic` is granted. Only ask for
+  // fields that our current scope list covers.
+  const res = await fetch(`${TIKTOK_API_BASE}/user/info/?fields=open_id,display_name,avatar_url`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   })
 
-  if (!res.ok) throw new Error('Failed to get TikTok profile')
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Failed to get TikTok profile (${res.status}): ${body.slice(0, 300)}`)
+  }
   const data = await res.json()
+  if (data.error?.code && data.error.code !== 'ok') {
+    throw new Error(`TikTok profile error: ${data.error.code} — ${data.error.message}`)
+  }
   return data.data.user
 }
 
