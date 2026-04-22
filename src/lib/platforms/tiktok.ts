@@ -4,8 +4,10 @@
 const TIKTOK_API_BASE = 'https://open.tiktokapis.com/v2'
 const TIKTOK_AUTH_BASE = 'https://www.tiktok.com/v2/auth/authorize'
 
-// In sandbox mode, TikTok only allows SELF_ONLY privacy
-const TIKTOK_PRIVACY_LEVEL = process.env.TIKTOK_SANDBOX === 'true'
+// In sandbox / unaudited mode, TikTok only allows SELF_ONLY privacy.
+// Trim the env var so stray whitespace (e.g. a trailing newline from
+// `echo "true" | vercel env add`) doesn't silently flip the check.
+const TIKTOK_PRIVACY_LEVEL = process.env.TIKTOK_SANDBOX?.trim() === 'true'
   ? 'SELF_ONLY'
   : 'PUBLIC_TO_EVERYONE'
 
