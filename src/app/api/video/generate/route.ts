@@ -89,9 +89,12 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    // I2V drifts as duration grows — 5s gives noticeably better quality than 10s
+    // when a reference image is provided. T2V keeps the 10s default.
+    const defaultDuration = imageUrl ? 5 : 10
     const genParams = {
       negativePrompt,
-      duration: duration ? parseInt(duration) : undefined,
+      duration: duration ? parseInt(duration) : defaultDuration,
       aspectRatio,
     }
 
@@ -112,7 +115,7 @@ export async function POST(request: NextRequest) {
       if (genParams.negativePrompt) input.negative_prompt = genParams.negativePrompt
       if (imageUrl) input.image_url = imageUrl
       if (provider === 'kling') {
-        input.duration = String(genParams.duration || 10)
+        input.duration = String(genParams.duration)
         input.aspect_ratio = genParams.aspectRatio || '16:9'
       }
 

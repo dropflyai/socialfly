@@ -286,7 +286,7 @@ async function generateWithSeedance(
   const config = getConfig()
   fal.config({ credentials: config.falApiKey })
 
-  const enhancedPrompt = enhanceVideoPrompt(prompt)
+  const enhancedPrompt = enhanceVideoPrompt(prompt, !!imageUrl)
   const modelId = imageUrl
     ? MODEL_IDS.seedance.imageToVideo
     : MODEL_IDS.seedance.textToVideo
@@ -334,7 +334,7 @@ async function generateWithMinimax(
   const config = getConfig()
   fal.config({ credentials: config.falApiKey })
 
-  const enhancedPrompt = enhanceVideoPrompt(prompt)
+  const enhancedPrompt = enhanceVideoPrompt(prompt, !!imageUrl)
   const modelId = imageUrl
     ? MODEL_IDS.minimax.imageToVideo
     : MODEL_IDS.minimax.textToVideo
@@ -375,7 +375,7 @@ async function generateWithKling(
   const config = getConfig()
   fal.config({ credentials: config.falApiKey })
 
-  const enhancedPrompt = enhanceVideoPrompt(prompt)
+  const enhancedPrompt = enhanceVideoPrompt(prompt, !!imageUrl)
   const modelId = imageUrl
     ? MODEL_IDS.kling.imageToVideo
     : MODEL_IDS.kling.textToVideo
@@ -422,7 +422,7 @@ async function generateWithLtx(
   const config = getConfig()
   fal.config({ credentials: config.falApiKey })
 
-  const enhancedPrompt = enhanceVideoPrompt(prompt)
+  const enhancedPrompt = enhanceVideoPrompt(prompt, !!imageUrl)
   const modelId = imageUrl
     ? MODEL_IDS.ltx.imageToVideo
     : MODEL_IDS.ltx.textToVideo
@@ -488,22 +488,24 @@ function extractVideoUrl(data: unknown): string | undefined {
 
 /**
  * Enhance a video prompt to get better results from AI models.
+ *
+ * For image-to-video (I2V), we pass the prompt through unchanged — the
+ * reference image already locks in style, subject, and lighting, so adding
+ * "cinematic, high quality" etc. causes the model to drift and fight the
+ * image. Motion-only prompts produce noticeably better results.
  */
-function enhanceVideoPrompt(prompt: string): string {
-  // Don't re-enhance if already detailed
+function enhanceVideoPrompt(prompt: string, isI2V = false): string {
+  if (isI2V) return prompt
   if (prompt.length > 200) return prompt
 
   const enhancements: string[] = []
 
-  // Add quality keywords if not present
   const hasQuality = ['cinematic', '4k', 'hd', 'high quality', 'professional', 'detailed'].some(kw => prompt.toLowerCase().includes(kw))
   if (!hasQuality) enhancements.push('high quality, cinematic')
 
-  // Add "no text" to avoid random text overlays
   const hasTextInstructions = ['text', 'words', 'caption', 'subtitle', 'title'].some(kw => prompt.toLowerCase().includes(kw))
   if (!hasTextInstructions) enhancements.push('no text overlays, no watermarks')
 
-  // Add smooth motion
   const hasMotion = ['smooth', 'steady', 'fluid', 'slow motion'].some(kw => prompt.toLowerCase().includes(kw))
   if (!hasMotion) enhancements.push('smooth camera movement')
 
@@ -519,8 +521,7 @@ function enhanceVideoPrompt(prompt: string): string {
 export async function smartGenerateVideo(
   options: GenerateVideoOptions & { negativePrompt?: string; duration?: number; aspectRatio?: string }
 ): Promise<GeneratedVideo & { routingScore?: VideoProviderScore[] }> {
-  const { prompt: rawPrompt, imageUrl, preferredProvider, negativePrompt, duration, aspectRatio } = options
-  const prompt = enhanceVideoPrompt(rawPrompt)
+  const { prompt, imageUrl, preferredProvider, negativePrompt, duration, aspectRatio } = options
   const params: VideoGenParams = { negativePrompt, duration, aspectRatio }
 
   const routeRequest: VideoRouteRequest = {
@@ -562,11 +563,10 @@ export async function smartGenerateVideo(
  */
 export async function generateVideoWithProvider(
   provider: 'seedance' | 'kling' | 'minimax' | 'ltx',
-  rawPrompt: string,
+  prompt: string,
   imageUrl?: string,
   params?: VideoGenParams,
 ): Promise<GeneratedVideo> {
-  const prompt = enhanceVideoPrompt(rawPrompt)
   switch (provider) {
     case 'seedance':
       return generateWithSeedance(prompt, imageUrl, params)
