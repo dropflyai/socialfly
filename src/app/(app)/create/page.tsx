@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Send, Loader2, Video, ImageIcon, Sparkles, Upload, X, Play,
-  RefreshCw, Download, Calendar, Check, ChevronDown,
+  RefreshCw, Download, Calendar, Check, ChevronDown, Pencil, RotateCcw,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -86,6 +86,9 @@ export default function CreatorPage() {
   const [brands, setBrands] = useState<{ id: string; name: string }[]>([])
   const [selectedBrandId, setSelectedBrandId] = useState<string | undefined>(undefined)
   const [showBrandPicker, setShowBrandPicker] = useState(false)
+  // Per-message prompt preview state (keyed by message index)
+  const [expandedPrompts, setExpandedPrompts] = useState<Record<number, boolean>>({})
+  const [editedPrompts, setEditedPrompts] = useState<Record<number, string>>({})
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -221,10 +224,11 @@ export default function CreatorPage() {
     setSending(false)
   }
 
-  async function handleGenerate(action: ChatMessage['action']) {
+  async function handleGenerate(action: ChatMessage['action'], promptOverride?: string) {
     if (!action) return
     setGenerating(true)
     setGeneratingType(action.action)
+    const finalPrompt = promptOverride ?? action.prompt
 
     try {
       if (action.action === 'generate_video') {
@@ -232,7 +236,7 @@ export default function CreatorPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            prompt: action.prompt,
+            prompt: finalPrompt,
             negativePrompt: action.negativePrompt,
             model: action.model || 'auto',
             imageUrl: action.imageUrl || selectedMedia?.url,
@@ -331,7 +335,7 @@ export default function CreatorPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            prompt: action.prompt,
+            prompt: finalPrompt,
             aspectRatio: action.aspectRatio || '1:1',
           }),
         })
@@ -731,6 +735,57 @@ export default function CreatorPage() {
                     </div>
                   )}
 
+                  {/* Prompt preview — see/edit the actual prompt before generating */}
+                  {msg.action.prompt && (() => {
+                    const expanded = expandedPrompts[i] === true
+                    const edited = editedPrompts[i]
+                    const currentValue = edited ?? msg.action.prompt
+                    const isEdited = edited !== undefined && edited !== msg.action.prompt
+                    return (
+                      <div className="border-t border-primary/10">
+                        <button
+                          onClick={() => setExpandedPrompts(prev => ({ ...prev, [i]: !expanded }))}
+                          className="w-full px-3 py-2 flex items-center justify-between text-[11px] hover:bg-primary/5 transition-colors"
+                        >
+                          <span className="flex items-center gap-1.5 text-muted-foreground">
+                            <Pencil className="h-3 w-3" />
+                            {expanded ? 'Hide prompt' : 'View/edit prompt'}
+                            {isEdited && !expanded && (
+                              <Badge variant="secondary" className="text-[9px] ml-1 py-0 h-4">edited</Badge>
+                            )}
+                          </span>
+                          <ChevronDown className={`h-3 w-3 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                        </button>
+                        {expanded && (
+                          <div className="px-3 pb-3 space-y-2">
+                            <textarea
+                              value={currentValue}
+                              onChange={(e) => setEditedPrompts(prev => ({ ...prev, [i]: e.target.value }))}
+                              className="w-full min-h-[80px] text-[11px] p-2 rounded border bg-background font-mono resize-y focus:outline-none focus:ring-1 focus:ring-primary"
+                              placeholder="Edit the prompt before generating..."
+                            />
+                            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                              <span>{currentValue.length} chars</span>
+                              {isEdited && (
+                                <button
+                                  onClick={() => setEditedPrompts(prev => {
+                                    const next = { ...prev }
+                                    delete next[i]
+                                    return next
+                                  })}
+                                  className="flex items-center gap-1 hover:text-foreground transition-colors"
+                                >
+                                  <RotateCcw className="h-3 w-3" />
+                                  Reset to AI version
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+
                   {/* Actions */}
                   <div className="p-3 space-y-2 border-t border-primary/10">
                     {/* Credit cost */}
@@ -743,7 +798,7 @@ export default function CreatorPage() {
                     <div className="flex gap-2">
                       <Button
                         size="sm"
-                        onClick={() => handleGenerate(msg.action)}
+                        onClick={() => handleGenerate(msg.action, editedPrompts[i])}
                         disabled={generating}
                         className="flex-1 gap-1"
                       >

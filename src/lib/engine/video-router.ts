@@ -134,9 +134,11 @@ export function scoreVideoProviders(request: VideoRouteRequest): VideoProviderSc
 
   const scores: VideoProviderScore[] = []
 
-  // Score each provider
+  // Score each provider. Kling gets a small baseline bump so it wins
+  // "no keyword" ties — it's 4x cheaper than Seedance with comparable
+  // quality for most social content, so it's the safer default.
   for (const [name, caps] of Object.entries(PROVIDER_CAPABILITIES)) {
-    let score = 50
+    let score = name === 'kling' ? 52 : 50
     const reasons: string[] = []
 
     // Cinematic quality needs
@@ -175,9 +177,15 @@ export function scoreVideoProviders(request: VideoRouteRequest): VideoProviderSc
       }
     }
 
-    // Prompt analysis — detect quality-demanding keywords
+    // Prompt analysis — detect quality-demanding keywords.
+    // Use word-boundary matching so "through" doesn't match "rough", "head"
+    // doesn't match "ad", etc.
+    const promptWords = request.prompt.toLowerCase().match(/\b[a-z]+\b/g) || []
+    const wordSet = new Set(promptWords)
+    const hasAnyWord = (kws: string[]) => kws.some(kw => wordSet.has(kw))
+
     const cinematicKeywords = ['cinematic', 'film', 'movie', 'dramatic', 'epic', 'professional', 'commercial', 'ad', 'marketing', 'brand']
-    if (cinematicKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
+    if (hasAnyWord(cinematicKeywords)) {
       if (name === 'seedance') {
         score += 20
         reasons.push('Cinematic/marketing keywords detected, Seedance best choice (+20)')
@@ -191,8 +199,8 @@ export function scoreVideoProviders(request: VideoRouteRequest): VideoProviderSc
     }
 
     // Realistic human/people keywords — Kling excels here
-    const realisticKeywords = ['person', 'people', 'human', 'face', 'portrait', 'talking', 'walking', 'dancing', 'lifestyle', 'model', 'customer', 'employee']
-    if (realisticKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
+    const realisticKeywords = ['person', 'people', 'human', 'face', 'portrait', 'talking', 'walking', 'dancing', 'lifestyle', 'model', 'customer', 'employee', 'woman', 'man', 'women', 'men', 'girl', 'boy']
+    if (hasAnyWord(realisticKeywords)) {
       if (name === 'kling') {
         score += 18
         reasons.push('Realistic human motion detected, Kling excels (+18)')
@@ -204,7 +212,7 @@ export function scoreVideoProviders(request: VideoRouteRequest): VideoProviderSc
 
     // Fast/draft keywords
     const draftKeywords = ['test', 'draft', 'quick', 'rough', 'preview', 'mockup']
-    if (draftKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
+    if (hasAnyWord(draftKeywords)) {
       if (name === 'ltx') {
         score += 20
         reasons.push('Draft/test keywords detected, LTX fast & cheap (+20)')
@@ -213,7 +221,7 @@ export function scoreVideoProviders(request: VideoRouteRequest): VideoProviderSc
 
     // Product/demo keywords
     const productKeywords = ['product', 'demo', 'showcase', 'feature', 'walkthrough', 'tutorial']
-    if (productKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
+    if (hasAnyWord(productKeywords)) {
       if (name === 'seedance') {
         score += 10
         reasons.push('Product showcase keywords, Seedance handles well (+10)')
@@ -286,7 +294,7 @@ async function generateWithSeedance(
   const config = getConfig()
   fal.config({ credentials: config.falApiKey })
 
-  const enhancedPrompt = enhanceVideoPrompt(prompt)
+  const enhancedPrompt = enhanceVideoPrompt(prompt, !!imageUrl)
   const modelId = imageUrl
     ? MODEL_IDS.seedance.imageToVideo
     : MODEL_IDS.seedance.textToVideo
@@ -334,7 +342,7 @@ async function generateWithMinimax(
   const config = getConfig()
   fal.config({ credentials: config.falApiKey })
 
-  const enhancedPrompt = enhanceVideoPrompt(prompt)
+  const enhancedPrompt = enhanceVideoPrompt(prompt, !!imageUrl)
   const modelId = imageUrl
     ? MODEL_IDS.minimax.imageToVideo
     : MODEL_IDS.minimax.textToVideo
@@ -375,7 +383,7 @@ async function generateWithKling(
   const config = getConfig()
   fal.config({ credentials: config.falApiKey })
 
-  const enhancedPrompt = enhanceVideoPrompt(prompt)
+  const enhancedPrompt = enhanceVideoPrompt(prompt, !!imageUrl)
   const modelId = imageUrl
     ? MODEL_IDS.kling.imageToVideo
     : MODEL_IDS.kling.textToVideo
@@ -422,7 +430,7 @@ async function generateWithLtx(
   const config = getConfig()
   fal.config({ credentials: config.falApiKey })
 
-  const enhancedPrompt = enhanceVideoPrompt(prompt)
+  const enhancedPrompt = enhanceVideoPrompt(prompt, !!imageUrl)
   const modelId = imageUrl
     ? MODEL_IDS.ltx.imageToVideo
     : MODEL_IDS.ltx.textToVideo
@@ -488,22 +496,24 @@ function extractVideoUrl(data: unknown): string | undefined {
 
 /**
  * Enhance a video prompt to get better results from AI models.
+ *
+ * For image-to-video (I2V), we pass the prompt through unchanged — the
+ * reference image already locks in style, subject, and lighting, so adding
+ * "cinematic, high quality" etc. causes the model to drift and fight the
+ * image. Motion-only prompts produce noticeably better results.
  */
-function enhanceVideoPrompt(prompt: string): string {
-  // Don't re-enhance if already detailed
+function enhanceVideoPrompt(prompt: string, isI2V = false): string {
+  if (isI2V) return prompt
   if (prompt.length > 200) return prompt
 
   const enhancements: string[] = []
 
-  // Add quality keywords if not present
   const hasQuality = ['cinematic', '4k', 'hd', 'high quality', 'professional', 'detailed'].some(kw => prompt.toLowerCase().includes(kw))
   if (!hasQuality) enhancements.push('high quality, cinematic')
 
-  // Add "no text" to avoid random text overlays
   const hasTextInstructions = ['text', 'words', 'caption', 'subtitle', 'title'].some(kw => prompt.toLowerCase().includes(kw))
   if (!hasTextInstructions) enhancements.push('no text overlays, no watermarks')
 
-  // Add smooth motion
   const hasMotion = ['smooth', 'steady', 'fluid', 'slow motion'].some(kw => prompt.toLowerCase().includes(kw))
   if (!hasMotion) enhancements.push('smooth camera movement')
 
@@ -519,8 +529,7 @@ function enhanceVideoPrompt(prompt: string): string {
 export async function smartGenerateVideo(
   options: GenerateVideoOptions & { negativePrompt?: string; duration?: number; aspectRatio?: string }
 ): Promise<GeneratedVideo & { routingScore?: VideoProviderScore[] }> {
-  const { prompt: rawPrompt, imageUrl, preferredProvider, negativePrompt, duration, aspectRatio } = options
-  const prompt = enhanceVideoPrompt(rawPrompt)
+  const { prompt, imageUrl, preferredProvider, negativePrompt, duration, aspectRatio } = options
   const params: VideoGenParams = { negativePrompt, duration, aspectRatio }
 
   const routeRequest: VideoRouteRequest = {
@@ -562,11 +571,10 @@ export async function smartGenerateVideo(
  */
 export async function generateVideoWithProvider(
   provider: 'seedance' | 'kling' | 'minimax' | 'ltx',
-  rawPrompt: string,
+  prompt: string,
   imageUrl?: string,
   params?: VideoGenParams,
 ): Promise<GeneratedVideo> {
-  const prompt = enhanceVideoPrompt(rawPrompt)
   switch (provider) {
     case 'seedance':
       return generateWithSeedance(prompt, imageUrl, params)

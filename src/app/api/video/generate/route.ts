@@ -4,9 +4,9 @@ import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 import { deductCredits } from '@/lib/credits'
 import { checkFeatureAccess } from '@/lib/tier-gates'
 import {
-  smartGenerateVideo,
   generateVideoWithProvider,
   getAvailableVideoModels,
+  pickVideoProvider,
 } from '@/lib/engine/video-router'
 import type { VideoProvider } from '@/lib/engine/types'
 
@@ -89,15 +89,26 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    // I2V drifts as duration grows — 5s gives noticeably better quality than 10s
+    // when a reference image is provided. T2V keeps the 10s default.
+    const defaultDuration = imageUrl ? 5 : 10
     const genParams = {
       negativePrompt,
-      duration: duration ? parseInt(duration) : undefined,
+      duration: duration ? parseInt(duration) : defaultDuration,
       aspectRatio,
     }
 
-    // For Kling and Seedance (slow models), submit to Fal queue and return request_id
-    // Frontend will poll for the result
-    if (provider === 'kling' || provider === 'seedance') {
+    // Resolve 'auto' via the smart router so users get the best provider
+    // for their prompt (cinematic → Seedance, humans → Kling, drafts → LTX,
+    // everything else → Minimax). Previously 'auto' was hardcoded to Minimax.
+    const resolvedProvider: 'seedance' | 'kling' | 'minimax' | 'ltx' =
+      provider === 'auto'
+        ? pickVideoProvider({ prompt, imageUrl })
+        : (provider as 'seedance' | 'kling' | 'minimax' | 'ltx')
+
+    // Kling and Seedance are too slow for synchronous HTTP — submit to Fal
+    // queue and return a requestId. The frontend polls /api/video/status.
+    if (resolvedProvider === 'kling' || resolvedProvider === 'seedance') {
       const { fal } = await import('@fal-ai/client')
       fal.config({ credentials: process.env.FAL_KEY })
 
@@ -105,54 +116,50 @@ export async function POST(request: NextRequest) {
         kling: { text: 'fal-ai/kling-video/v1/standard/text-to-video', image: 'fal-ai/kling-video/v1/standard/image-to-video' },
         seedance: { text: 'fal-ai/seedance-video-01-lora', image: 'fal-ai/seedance-video-01-lora' },
       }
-      const modelId = imageUrl ? modelIds[provider].image : modelIds[provider].text
+      const modelId = imageUrl ? modelIds[resolvedProvider].image : modelIds[resolvedProvider].text
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const input: Record<string, any> = { prompt }
       if (genParams.negativePrompt) input.negative_prompt = genParams.negativePrompt
       if (imageUrl) input.image_url = imageUrl
-      if (provider === 'kling') {
-        input.duration = String(genParams.duration || 10)
+      if (resolvedProvider === 'kling') {
+        input.duration = String(genParams.duration)
         input.aspect_ratio = genParams.aspectRatio || '16:9'
       }
 
       const { request_id } = await fal.queue.submit(modelId, { input })
 
+      const modelLabel = resolvedProvider === 'kling'
+        ? 'Kling (Realistic, ~$0.20)'
+        : 'Seedance 2.0 (Cinematic, ~$0.80)'
+      const autoSuffix = provider === 'auto' ? ' — auto-picked' : ''
+
       return NextResponse.json({
         success: true,
         async: true,
         requestId: request_id,
-        provider,
-        model: provider === 'kling' ? 'Kling (Realistic, ~$0.20)' : 'Seedance 2.0 (Cinematic, ~$0.80)',
-        statusUrl: `/api/video/status?requestId=${request_id}&provider=${provider}`,
+        provider: resolvedProvider,
+        autoPicked: provider === 'auto',
+        model: modelLabel + autoSuffix,
+        statusUrl: `/api/video/status?requestId=${request_id}&provider=${resolvedProvider}`,
       })
     }
 
-    // For fast models (minimax, ltx), generate synchronously
-    let result
-    if (provider === 'auto') {
-      // Auto-routing for fast models only to avoid timeout
-      result = await smartGenerateVideo({
-        prompt,
-        imageUrl,
-        preferredProvider: 'minimax',
-        ...genParams,
-      })
-    } else {
-      result = await generateVideoWithProvider(
-        provider as 'minimax' | 'ltx',
-        prompt,
-        imageUrl,
-        genParams,
-      )
-    }
+    // Fast models run synchronously.
+    const result = await generateVideoWithProvider(
+      resolvedProvider,
+      prompt,
+      imageUrl,
+      genParams,
+    )
 
     return NextResponse.json({
       success: true,
       async: false,
       videoUrl: result.url,
-      model: result.model,
-      provider: result.provider,
+      model: result.model + (provider === 'auto' ? ' — auto-picked' : ''),
+      provider: resolvedProvider,
+      autoPicked: provider === 'auto',
     })
   } catch (error) {
     console.error(`Video generation error (provider: ${provider}):`, error)

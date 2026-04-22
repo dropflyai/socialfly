@@ -223,6 +223,35 @@ function writeScene(brief: CreativeBrief): string {
   return `${opener}, ${middle}. ${closer}. ${style}.`
 }
 
+// Image-to-video: the reference image already defines subject, setting, style,
+// lighting, and color grade. Re-describing any of it makes the model drift
+// away from the image (verified via A/B test — motion-only produced noticeably
+// better results than the full scene description). Only describe what should
+// change over time.
+function writeMotionScene(brief: CreativeBrief): string {
+  const parts: string[] = []
+
+  if (brief.cameraMovement && brief.cameraMovement !== 'static') {
+    const speed = brief.cameraSpeed || 'slow'
+    parts.push(`${speed} ${brief.cameraMovement}`)
+  }
+
+  if (brief.action) {
+    parts.push(brief.action)
+  } else if (brief.motionDirection) {
+    parts.push(`motion ${brief.motionDirection}`)
+  } else {
+    parts.push('subtle natural motion')
+  }
+
+  // Atmospheric motion that lives in the scene
+  if (brief.weather && ['rain', 'snow', 'windy', 'fog'].includes(brief.weather)) {
+    parts.push(`${brief.weather} moving through the frame`)
+  }
+
+  return parts.join(', ') + '.'
+}
+
 // ============================================================================
 // Public API
 // ============================================================================
@@ -241,17 +270,20 @@ export interface BuiltPrompt {
 export function buildFullPrompt(brief: CreativeBrief, modelOverride?: string): BuiltPrompt {
   const model = modelOverride || recommendModel(brief)
   const aspectRatio = brief.aspectRatio || getAspectRatioForPlatform(brief.platform)
-  const duration = brief.duration || 10
+  const isI2V = brief.type === 'video' && !!brief.referenceImageUrl
+  // I2V drifts more as duration grows — default to 5s unless user overrode
+  const duration = brief.duration || (isI2V ? 5 : 10)
   const contentType = detectContentType(brief)
 
   let prompt: string
 
   if (brief.type === 'image') {
     prompt = writeImageScene(brief, model)
+  } else if (isI2V) {
+    prompt = writeMotionScene(brief)
   } else {
     const rawScene = writeScene(brief)
 
-    // Apply model-specific adjustments
     switch (model) {
       case 'kling': prompt = writeKlingScene(rawScene); break
       case 'seedance': prompt = writeSeedanceScene(rawScene); break
@@ -261,13 +293,17 @@ export function buildFullPrompt(brief: CreativeBrief, modelOverride?: string): B
     }
   }
 
-  // Append style reference if provided
-  if (brief.styleReference) {
+  // Style reference only makes sense for T2V and image gen — for I2V the
+  // reference image already carries the style.
+  if (brief.styleReference && !isI2V) {
     prompt += `, inspired by the visual style of ${brief.styleReference}`
   }
 
-  const negativePrompt = MODEL_NEGATIVE[model] || UNIVERSAL_NEGATIVE
-  const cacheKey = `${brief.subject}:${brief.mood}:${brief.type}:${brief.platform || ''}`
+  // I2V: keep negatives minimal — long negatives can suppress motion.
+  const negativePrompt = isI2V
+    ? 'no morphing, no distorted faces, no extra limbs'
+    : (MODEL_NEGATIVE[model] || UNIVERSAL_NEGATIVE)
+  const cacheKey = `${brief.subject}:${brief.mood}:${brief.type}:${brief.platform || ''}:${isI2V ? 'i2v' : 't2v'}`
 
   return { prompt, negativePrompt, model, aspectRatio, duration, brief, cacheKey, contentType }
 }
