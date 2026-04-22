@@ -134,9 +134,11 @@ export function scoreVideoProviders(request: VideoRouteRequest): VideoProviderSc
 
   const scores: VideoProviderScore[] = []
 
-  // Score each provider
+  // Score each provider. Kling gets a small baseline bump so it wins
+  // "no keyword" ties — it's 4x cheaper than Seedance with comparable
+  // quality for most social content, so it's the safer default.
   for (const [name, caps] of Object.entries(PROVIDER_CAPABILITIES)) {
-    let score = 50
+    let score = name === 'kling' ? 52 : 50
     const reasons: string[] = []
 
     // Cinematic quality needs
@@ -175,9 +177,15 @@ export function scoreVideoProviders(request: VideoRouteRequest): VideoProviderSc
       }
     }
 
-    // Prompt analysis — detect quality-demanding keywords
+    // Prompt analysis — detect quality-demanding keywords.
+    // Use word-boundary matching so "through" doesn't match "rough", "head"
+    // doesn't match "ad", etc.
+    const promptWords = request.prompt.toLowerCase().match(/\b[a-z]+\b/g) || []
+    const wordSet = new Set(promptWords)
+    const hasAnyWord = (kws: string[]) => kws.some(kw => wordSet.has(kw))
+
     const cinematicKeywords = ['cinematic', 'film', 'movie', 'dramatic', 'epic', 'professional', 'commercial', 'ad', 'marketing', 'brand']
-    if (cinematicKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
+    if (hasAnyWord(cinematicKeywords)) {
       if (name === 'seedance') {
         score += 20
         reasons.push('Cinematic/marketing keywords detected, Seedance best choice (+20)')
@@ -191,8 +199,8 @@ export function scoreVideoProviders(request: VideoRouteRequest): VideoProviderSc
     }
 
     // Realistic human/people keywords — Kling excels here
-    const realisticKeywords = ['person', 'people', 'human', 'face', 'portrait', 'talking', 'walking', 'dancing', 'lifestyle', 'model', 'customer', 'employee']
-    if (realisticKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
+    const realisticKeywords = ['person', 'people', 'human', 'face', 'portrait', 'talking', 'walking', 'dancing', 'lifestyle', 'model', 'customer', 'employee', 'woman', 'man', 'women', 'men', 'girl', 'boy']
+    if (hasAnyWord(realisticKeywords)) {
       if (name === 'kling') {
         score += 18
         reasons.push('Realistic human motion detected, Kling excels (+18)')
@@ -204,7 +212,7 @@ export function scoreVideoProviders(request: VideoRouteRequest): VideoProviderSc
 
     // Fast/draft keywords
     const draftKeywords = ['test', 'draft', 'quick', 'rough', 'preview', 'mockup']
-    if (draftKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
+    if (hasAnyWord(draftKeywords)) {
       if (name === 'ltx') {
         score += 20
         reasons.push('Draft/test keywords detected, LTX fast & cheap (+20)')
@@ -213,7 +221,7 @@ export function scoreVideoProviders(request: VideoRouteRequest): VideoProviderSc
 
     // Product/demo keywords
     const productKeywords = ['product', 'demo', 'showcase', 'feature', 'walkthrough', 'tutorial']
-    if (productKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
+    if (hasAnyWord(productKeywords)) {
       if (name === 'seedance') {
         score += 10
         reasons.push('Product showcase keywords, Seedance handles well (+10)')
