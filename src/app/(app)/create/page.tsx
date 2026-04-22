@@ -1150,12 +1150,12 @@ export default function CreatorPage() {
                 onClick={async () => {
                   setPosting(true)
                   try {
-                    let scheduleFor: string
-                    if (postTiming === 'schedule' && postScheduleDate && postScheduleTime) {
-                      scheduleFor = new Date(`${postScheduleDate}T${postScheduleTime}`).toISOString()
-                    } else {
-                      scheduleFor = new Date(Date.now() + 2 * 60 * 1000).toISOString()
-                    }
+                    // For "Post Now", omit scheduleFor so the API publishes
+                    // immediately instead of queueing for the cron (which adds
+                    // a 2-minute delay). For "Schedule", pass the user's time.
+                    const scheduleFor = postTiming === 'schedule' && postScheduleDate && postScheduleTime
+                      ? new Date(`${postScheduleDate}T${postScheduleTime}`).toISOString()
+                      : undefined
 
                     const res = await fetch('/api/posts/publish', {
                       method: 'POST',
@@ -1170,12 +1170,30 @@ export default function CreatorPage() {
                     })
 
                     if (res.ok) {
+                      const data = await res.json()
                       setShowPostFlow(false)
-                      const timeMsg = postTiming === 'now' ? 'in about 2 minutes' : `on ${postScheduleDate} at ${postScheduleTime}`
-                      setMessages(prev => [...prev, {
-                        role: 'assistant',
-                        content: `Scheduled to ${postPlatforms.join(', ')} ${timeMsg}! Check your Schedule page to track it.`,
-                      }])
+
+                      if (data.scheduled) {
+                        setMessages(prev => [...prev, {
+                          role: 'assistant',
+                          content: `Scheduled to ${postPlatforms.join(', ')} on ${postScheduleDate} at ${postScheduleTime}! Check your Schedule page to track it.`,
+                        }])
+                      } else {
+                        // Immediate publish — show per-platform results
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const successes = (data.results || []).filter((r: any) => r.success).map((r: any) => r.platform)
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const failures = (data.results || []).filter((r: any) => !r.success)
+                        const content = successes.length && !failures.length
+                          ? `Posted to ${successes.join(', ')} ✓`
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          : failures.length && !successes.length
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            ? `Couldn't post: ${failures.map((f: any) => `${f.platform} — ${f.error}`).join('; ')}`
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            : `Posted to ${successes.join(', ')}, but ${failures.map((f: any) => `${f.platform} failed: ${f.error}`).join('; ')}`
+                        setMessages(prev => [...prev, { role: 'assistant', content }])
+                      }
                     } else {
                       const err = await res.json()
                       setMessages(prev => [...prev, { role: 'assistant', content: `Couldn't schedule: ${err.error}` }])
