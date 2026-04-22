@@ -62,8 +62,11 @@ export async function GET(request: NextRequest) {
     return response
   } catch (err) {
     console.error('TikTok OAuth error:', err)
+    // Surface the real error so we can diagnose sandbox / credential issues.
+    // Remove once TikTok review is complete.
+    const message = err instanceof Error ? err.message : 'TikTok connection failed'
     return NextResponse.redirect(
-      new URL(`/platforms?error=${encodeURIComponent('TikTok connection failed')}`, request.url)
+      new URL(`/platforms?error=${encodeURIComponent(message)}`, request.url)
     )
   }
 }
