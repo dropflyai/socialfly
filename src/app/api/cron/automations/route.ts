@@ -210,8 +210,33 @@ async function executeAutomation(
 
   const { data: brand } = await brandQuery.single()
 
+  // DreamFly conversion context — parent-focused CTAs
+  let conversionContext = ''
+
   if (brand) {
     brandContext = `Brand: ${brand.name}. Tone: ${brand.voice_tone || userTone}. Audience: ${brand.target_audience || 'general'}. Content pillars: ${(brand.content_pillars || []).join(', ')}.`
+
+    // Inject DreamFly-specific conversion instructions
+    const brandNameLower = (brand.name || '').toLowerCase()
+    if (brandNameLower.includes('dreamfly') || brandNameLower.includes('dream fly') || brandNameLower.includes('sleepytales')) {
+      conversionContext = `
+
+CRITICAL CONVERSION RULES (DreamFly):
+- You are writing for PARENTS of kids ages 2-10. Speak to their nightly struggles.
+- Every post MUST end with a clear call-to-action: "Try a free story tonight 👉 Link in bio" or "Your first story is free — link in bio ✨"
+- Lead with parent pain points: bedtime battles, screen time guilt, kids who won't sleep, wanting quality bonding time
+- NEVER talk about AI, technology, or how DreamFly works internally. Sell the OUTCOME: peaceful bedtimes, kids who love reading, personalized adventures with their name in the story
+- Use these hooks (rotate daily):
+  * "What if bedtime was the best part of your day?"
+  * "Name one thing harder than getting a toddler to sleep 😅"
+  * "My kid asked for ANOTHER story tonight. Mission accomplished."
+  * "Screen time you can actually feel good about ✨"
+  * "When your child hears their own name in a story, the look on their face..."
+- Include parent-community hashtags: #momlife #dadlife #parentinghacks #bedtimeroutine #toddlermom #kidsbooks #raisingreaders #bedtimestories
+- Vary post types: testimonial-style, question-to-parents, day-in-the-life, problem→solution, emotional moment
+- ALWAYS include "Link in bio" or "🔗 in bio" — this is the #1 priority
+`
+    }
   } else {
     brandContext = `Tone: ${userTone}.`
   }
@@ -297,7 +322,7 @@ ${bottomPost && bottomPost.engagement !== topPost.engagement ? `- Lowest perform
 ${brandContext}
 ${todaysTopic ? `Today's topic/theme: ${todaysTopic}` : 'Choose an engaging topic that fits the brand.'}
 ${contentExamples ? `\nHere are example posts the user likes (match this style):\n${contentExamples}` : ''}
-
+${conversionContext}
 Create an engaging, original post. Be specific — don't be generic.
 The tone should be ${userTone.toLowerCase()}.
 Include relevant hashtags.`
@@ -308,7 +333,7 @@ Include relevant hashtags.`
 ${brandContext}
 Industry focus: ${userIndustry || todaysTopic || 'technology and AI'}
 ${contentExamples ? `\nStyle reference:\n${contentExamples}` : ''}
-
+${conversionContext}
 Generate a post about a current trend, insight, or development in this space.
 Don't make up fake news — share a real insight or perspective.
 The tone should be ${userTone.toLowerCase()}.
@@ -328,7 +353,7 @@ Product: ${product || 'our product'}
 What it does: ${productDesc || 'helps businesses grow'}
 Today's pain point to address: ${todaysPain}
 ${contentExamples ? `\nStyle reference:\n${contentExamples}` : ''}
-
+${conversionContext}
 Create a pain-point driven post that resonates with the audience.
 Don't be salesy — be helpful and relatable. Lead with the problem, then hint at the solution.
 The tone should be ${userTone.toLowerCase()}.
@@ -366,6 +391,7 @@ Include relevant hashtags.`
       prompt = `You are a social media manager. Generate an engaging social media post.
 ${brandContext}
 ${todaysTopic ? `Topic: ${todaysTopic}` : ''}
+${conversionContext}
 The tone should be ${userTone.toLowerCase()}.
 Create a post that encourages engagement. Include hashtags.`
   }

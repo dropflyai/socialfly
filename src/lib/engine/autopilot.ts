@@ -568,6 +568,40 @@ function pickContentPillar(mix: AutopilotConfig['contentMix']): string {
 }
 
 function buildSmartTopic(product: ProductConfig, pillar: string): string {
+  // DreamFly-specific parent-focused topics that convert
+  const isDreamFly = product.name.toLowerCase().includes('dreamfly') || product.name.toLowerCase().includes('dream fly')
+
+  if (isDreamFly) {
+    const dreamflyTemplates: Record<string, string[]> = {
+      educational: [
+        'Why personalized bedtime stories help kids fall asleep faster — and how parents are using DreamFly to make it happen. End with: Try a free story tonight, link in bio.',
+        '5 signs your toddler needs a better bedtime routine (and one easy fix). End with: Your first story is free — link in bio.',
+        'How reading your child\'s name in a story builds confidence and early literacy. End with: Try it free, link in bio.',
+      ],
+      entertaining: [
+        'POV: Your 3-year-old just heard their name in a bedtime story for the first time. Their face = priceless. End with: Try it free — link in bio.',
+        'Name one thing harder than getting a toddler to sleep. We\'ll wait. (We also have a solution — link in bio)',
+        'When your kid asks for ANOTHER story tonight instead of fighting bedtime. Parent win. End with: Free first story — link in bio.',
+      ],
+      inspirational: [
+        'What if bedtime was the part of the day you actually looked forward to? DreamFly makes it happen — one personalized story at a time. Link in bio.',
+        'Screen time you can feel good about: personalized stories that use your child\'s name, age, and interests. Try it free — link in bio.',
+        'Every child deserves to be the hero of their own story. DreamFly creates personalized adventures just for them. Free first story — link in bio.',
+      ],
+      promotional: [
+        'DreamFly creates personalized bedtime stories with YOUR child\'s name, favorite animal, and a nightly emotional check-in. First story is free. Link in bio.',
+        'Bedtime battles? DreamFly\'s AI creates calming, personalized stories that help kids ages 2-10 wind down. Try it free tonight — link in bio.',
+      ],
+      behindTheScenes: [
+        'We built DreamFly because we were tired of the same 3 bedtime stories on repeat. Now every night is a new adventure with their name in it. Try it free — link in bio.',
+        'The story behind DreamFly: built by parents, for parents. Because bedtime should be magical, not stressful. Free first story — link in bio.',
+      ],
+    }
+
+    const options = dreamflyTemplates[pillar] || dreamflyTemplates.educational
+    return options[Math.floor(Math.random() * options.length)]
+  }
+
   const templates: Record<string, string[]> = {
     educational: [
       `How ${product.name} helps ${product.targetAudience} with ${product.keyFeatures[0] || 'their business'}`,
