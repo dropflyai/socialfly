@@ -200,7 +200,7 @@ async function executeAutomation(
   let brandContext = ''
   let brandQuery = supabase
     .from('brand_profiles')
-    .select('name, voice_tone, voice_description, target_audience, content_pillars')
+    .select('id, name, voice_tone, voice_description, target_audience, content_pillars, conversion_url')
 
   if (rule.brand_id) {
     brandQuery = brandQuery.eq('id', rule.brand_id)
@@ -446,6 +446,52 @@ Return valid JSON:
     generated = { text: textBlock.text.slice(0, 2000) }
   }
 
+  // If the brand has a conversion URL configured, mint a per-post short link
+  // for each platform where URLs are clickable in-feed (LinkedIn, Twitter,
+  // Facebook). Instagram and TikTok don't render in-text URLs, so they keep
+  // their "link in bio" CTA — bio-link attribution requires a separate flow.
+  // Each clickable platform gets its OWN short link so we can attribute
+  // clicks per platform per post.
+  const conversionUrl = (brand as { conversion_url?: string } | null)?.conversion_url
+  const CLICKABLE_PLATFORMS = new Set(['linkedin', 'twitter', 'facebook'])
+  const shortLinksByPlatform: Record<string, string> = {}
+
+  if (conversionUrl && (brand as { id?: string } | null)?.id) {
+    const { createShortLink } = await import('@/lib/links')
+    for (const platform of platforms) {
+      if (!CLICKABLE_PLATFORMS.has(platform)) continue
+      try {
+        const { shortUrl } = await createShortLink({
+          userId: rule.user_id,
+          targetUrl: conversionUrl,
+          brandId: (brand as { id: string }).id,
+          platform,
+          // post_id linked after the post row is created below
+        })
+        shortLinksByPlatform[platform] = shortUrl
+
+        // Append the short link to the variant text (or the fallback text
+        // if no variant). Skip if the link is already present.
+        if (generated.variants?.[platform]) {
+          const v = generated.variants[platform]
+          if (!v.text.includes(shortUrl)) {
+            v.text = `${v.text.trim()}\n\n${shortUrl}`
+          }
+        } else {
+          generated.variants = generated.variants || {}
+          const baseText = generated.text || ''
+          generated.variants[platform] = {
+            text: baseText.includes(shortUrl) ? baseText : `${baseText.trim()}\n\n${shortUrl}`,
+            hashtags: [],
+          }
+        }
+      } catch (err) {
+        console.error(`[automation] short-link creation failed for ${platform}:`, err)
+        // Fall through — post will publish without click tracking on this platform
+      }
+    }
+  }
+
   const postText = generated.variants?.[platforms[0]]?.text || generated.text
   const mediaUrls: string[] = []
   let mediaType: string | undefined = undefined
@@ -600,6 +646,7 @@ Return valid JSON:
         automation_rule_id: rule.id,
         automation_type: type,
         variants: generated.variants,
+        short_links: shortLinksByPlatform,
       },
     })
     .select()
@@ -607,6 +654,20 @@ Return valid JSON:
 
   if (postError) {
     return { success: false, error: `Failed to create post: ${postError.message}` }
+  }
+
+  // Backfill post_id on the short links we just minted, so click reports
+  // can be grouped by post.
+  if (Object.keys(shortLinksByPlatform).length > 0) {
+    const slugs = Object.values(shortLinksByPlatform)
+      .map(url => url.split('/go/')[1])
+      .filter(Boolean)
+    if (slugs.length > 0) {
+      await supabase
+        .from('link_redirects')
+        .update({ post_id: post.id })
+        .in('slug', slugs)
+    }
   }
 
   return { success: true, postId: post.id }
