@@ -50,6 +50,10 @@ export async function POST(request: NextRequest) {
       const text = content.text || ''
       const mediaUrls = content.media_urls || []
       const mediaType = content.media_type
+      // Per-platform variants produced by the automation LLM. Each platform
+      // gets its own length/tone/hashtag-optimized copy instead of the same
+      // text for all. Falls back to `text` when no variant for a platform.
+      const variants = content.variants as Record<string, { text?: string; hashtags?: string[] }> | undefined
 
       if (!text) {
         // Try loading from content_items if linked
@@ -92,7 +96,8 @@ export async function POST(request: NextRequest) {
         text,
         post.platforms,
         mediaUrls.length ? mediaUrls : undefined,
-        mediaType
+        mediaType,
+        variants,
       )
 
       await updatePostStatus(supabase, post.id, publishResults)

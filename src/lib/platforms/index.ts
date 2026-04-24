@@ -219,13 +219,21 @@ export async function publishToplatform(
   }
 }
 
-// Publish to multiple platforms at once
+// Publish to multiple platforms at once.
+//
+// `text` is the fallback caption used when no platform-specific variant is
+// provided. `variants` (optional) maps a platform name to its own text and/or
+// hashtags — this is how automation-generated posts get the right length,
+// tone, and hashtag count for each platform (TikTok's 150-char punchy line
+// vs LinkedIn's thought-leadership hook). Callers that don't have variants
+// can omit the param and every platform gets the same `text`.
 export async function publishToMultiplePlatforms(
   userId: string,
   text: string,
   platforms: Platform[],
   mediaUrls?: string[],
-  mediaType?: 'image' | 'video' | 'carousel'
+  mediaType?: 'image' | 'video' | 'carousel',
+  variants?: Record<string, { text?: string; hashtags?: string[] }>,
 ): Promise<PublishResult[]> {
   const supabase = getServiceClient()
 
@@ -245,16 +253,28 @@ export async function publishToMultiplePlatforms(
     throw new Error('No active platform connections found. Please connect your accounts in Settings > Platforms.')
   }
 
-  // Publish to each platform in parallel
+  // Publish to each platform in parallel, using per-platform variant text
+  // when provided. If a variant has hashtags and they're not already in the
+  // variant text, append them — otherwise leave the text as-is.
   const results = await Promise.all(
-    activeConnections.map((conn) =>
-      publishToplatform(conn, {
+    activeConnections.map((conn) => {
+      const variant = variants?.[conn.platform]
+      let platformText = variant?.text || text
+      if (variant?.hashtags?.length) {
+        const tagString = variant.hashtags
+          .map(h => h.startsWith('#') ? h : `#${h}`)
+          .join(' ')
+        if (!platformText.includes(tagString.split(' ')[0])) {
+          platformText = `${platformText.trim()}\n\n${tagString}`
+        }
+      }
+      return publishToplatform(conn, {
         platform: conn.platform,
-        text,
+        text: platformText,
         mediaUrls,
         mediaType,
       })
-    )
+    })
   )
 
   return results
