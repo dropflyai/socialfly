@@ -409,12 +409,33 @@ Create a post that encourages engagement. Include hashtags.`
     .map(p => platformSpecs[p] || `${p}: general social media post`)
     .join('\n')
 
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 1500,
-    messages: [{
-      role: 'user',
-      content: `${prompt}
+  // Industry-news automations need fresh information — use Anthropic's
+  // built-in web_search tool so Claude can find current trends in the user's
+  // industry before writing the post. Without it, "share a real insight" was
+  // hand-waving — Claude wrote from training data and posts went stale fast.
+  // Other automation types don't need search; keep them off to save tokens.
+  const useWebSearch = type === 'ai_news'
+  const userMessage = useWebSearch
+    ? `${prompt}
+${analyticsContext}${feedbackContext}
+Step 1: Use the web_search tool to find 2-3 fresh items from the last 7 days about: ${userIndustry || todaysTopic || 'the brand industry'}. Search for trends, releases, studies, viral moments, or news that the brand's audience would care about.
+
+Step 2: Pick the single most interesting item and write a post about it. Lead with a hook, summarize the item plainly (no jargon), then add the brand's perspective on why it matters to the audience. Don't list multiple items in one post.
+
+Step 3: Generate platform-specific versions for: ${platforms.join(', ')}
+
+Platform specs:
+${platformInstructions}
+
+Return ONLY valid JSON (in your final response after searching), no prose around it:
+{
+  "text": "the main post text (use the first platform's version)",
+  "imagePrompt": "a short description of an image that would complement this post (for AI image generation)",
+  "variants": {
+    "${platforms[0]}": { "text": "platform text", "hashtags": ["#tag1"] }
+  }
+}`
+    : `${prompt}
 ${analyticsContext}${feedbackContext}
 Generate platform-specific versions for: ${platforms.join(', ')}
 
@@ -428,22 +449,35 @@ Return valid JSON:
   "variants": {
     "${platforms[0]}": { "text": "platform text", "hashtags": ["#tag1"] }
   }
-}`,
-    }],
-  })
+}`
 
-  const textBlock = response.content.find(b => b.type === 'text')
-  if (!textBlock || textBlock.type !== 'text') {
+  const response = await anthropic.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 4000,
+    messages: [{ role: 'user', content: userMessage }],
+    ...(useWebSearch && {
+      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+    }),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any)
+
+  // With web_search enabled the response interleaves text, server_tool_use,
+  // and web_search_tool_result blocks. The final answer is the LAST text
+  // block. Without web_search there's only one text block, so .find still
+  // works for that path — but we use .findLast for both to be safe.
+  const textBlocks = response.content.filter(b => b.type === 'text')
+  const finalText = textBlocks.length ? textBlocks[textBlocks.length - 1] : null
+  if (!finalText || finalText.type !== 'text') {
     return { success: false, error: 'No response from Claude' }
   }
 
   let generated: { text: string; imagePrompt?: string; variants?: Record<string, { text: string; hashtags?: string[] }> }
   try {
-    const jsonMatch = textBlock.text.match(/\{[\s\S]*\}/)
+    const jsonMatch = finalText.text.match(/\{[\s\S]*\}/)
     if (!jsonMatch) throw new Error('No JSON in response')
     generated = JSON.parse(jsonMatch[0])
   } catch {
-    generated = { text: textBlock.text.slice(0, 2000) }
+    generated = { text: finalText.text.slice(0, 2000) }
   }
 
   // If the brand has a conversion URL configured, mint a per-post short link
