@@ -139,6 +139,7 @@ function isDue(rule: AutomationRule): boolean {
 
   switch (schedule) {
     case 'daily': return hoursSinceLast >= 20 // ~daily with some buffer
+    case 'every_other_day': return hoursSinceLast >= 44 // ~48h with buffer
     case 'weekdays': {
       const day = now.getUTCDay()
       return (day >= 1 && day <= 5) && hoursSinceLast >= 20
@@ -153,6 +154,7 @@ function calculateNextTrigger(schedule: string): Date {
   const next = new Date()
   switch (schedule) {
     case 'daily': next.setHours(next.getHours() + 24); break
+    case 'every_other_day': next.setHours(next.getHours() + 48); break
     case 'weekdays': {
       next.setHours(next.getHours() + 24)
       // Skip weekends
