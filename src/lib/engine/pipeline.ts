@@ -5,9 +5,10 @@
  * Single call does everything.
  */
 
-import { generateContent, generateImage } from './generate'
+import { generateContent, generateImage, enhanceImagePrompt } from './generate'
 import { publish, schedule } from './publish'
-import { loadBrandVoice } from './brand'
+import { loadBrandDNA, brandDNAToCapabilityBinding } from './brand'
+import { generateBrandImage } from './capability-engine'
 import { smartGenerateVideo } from './video-router'
 import type {
   GenerateAndPublishOptions,
@@ -103,17 +104,34 @@ export async function generateAndPublish(
         || variant?.suggestedMedia
         || `Professional social media image for: ${topic}`
 
-      // Load brand for image style context
-      let brand = undefined
-      if (userId) {
-        brand = await loadBrandVoice(userId, brandId) || undefined
-      }
+      const aspect = includeVideo ? '16:9' as const : imageAspectRatio
 
-      image = await generateImage({
-        prompt: baseImagePrompt,
-        aspectRatio: includeVideo ? '16:9' : imageAspectRatio,
-        enhancePrompt: true,
+      // U3: load Brand DNA (the Soul ledger) and route image gen through the
+      // capability engine so the four hf_* bindings (soul/brand_kit/style/elements)
+      // are injected. When no brand_souls row exists AND Higgsfield is not the
+      // opted-in media default, the engine resolves to the UNCHANGED legacy FAL
+      // path — byte-identical to before (zero behavior change).
+      const dna = userId ? await loadBrandDNA(userId).catch(() => null) : null
+      const binding = brandDNAToCapabilityBinding(dna)
+
+      // Preserve the prior prompt-enhancement behavior (Claude) before generation.
+      const finalPrompt = await enhanceImagePrompt(baseImagePrompt).catch(() => baseImagePrompt)
+
+      const capResult = await generateBrandImage({
+        prompt: finalPrompt,
+        aspectRatio: aspect,
+        platform: primaryPlatform,
+        userId,
+        brandDNA: binding,
       })
+
+      if (capResult.url) {
+        image = { url: capResult.url, prompt: baseImagePrompt, enhancedPrompt: finalPrompt, meta: capResult.meta }
+      } else {
+        // Capability engine fail-soft with no media (e.g. queued / gate-skipped) —
+        // fall back to the direct generator so the pipeline still produces an image.
+        image = await generateImage({ prompt: baseImagePrompt, aspectRatio: aspect, enhancePrompt: true })
+      }
     }
 
     // Step 3: Generate video if requested

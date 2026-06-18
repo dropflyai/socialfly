@@ -48,3 +48,6 @@ credentials/
 .env*.local
 deliverables/
 supabase/.temp/
+
+# Generated proof assets (regenerable, large binaries)
+docs/proofs/

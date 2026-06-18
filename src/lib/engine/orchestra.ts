@@ -18,6 +18,8 @@
 
 import { getConfig, getSupabase } from './config'
 import { generateContent } from './generate'
+import { loadBrandDNA, brandDNAToCapabilityBinding } from './brand'
+import { generateBrandImage } from './capability-engine'
 import {
   smartGenerateImage,
   scoreProviders as scoreImageProviders,
@@ -29,6 +31,9 @@ import {
 import {
   smartGenerateAudio,
 } from './audio-router'
+// TODO(prune): replace with Higgsfield reframe/upscale/remove_bg tools once wired
+// (capability-engine runCapability({capability:'upscale'|'remove_bg'})). Replicate
+// stays for now — it has functional consumers. See RESPEC §5.3.
 import {
   removeBackground,
   upscaleImage,
@@ -56,11 +61,11 @@ import type {
 // Cost Estimates (per generation, in USD)
 // ============================================================================
 
+// PRUNE (E1): nanobanana/dalle/stability removed — Higgsfield is the primary image
+// engine now, FAL the fallback/draft lane.
 const IMAGE_COSTS: Record<string, number> = {
+  higgsfield: 0.05,
   fal: 0.03,
-  nanobanana: 0.01,
-  dalle: 0.08,
-  stability: 0.04,
 }
 
 const VIDEO_COSTS: Record<string, number> = {
@@ -77,10 +82,12 @@ const TEXT_COST_PER_TOKEN = 0.000003 // Claude Sonnet approximate
 // Budget-to-Provider Mapping
 // ============================================================================
 
+// PRUNE (E1): image provider preferences narrowed to higgsfield (primary) + fal
+// (fallback/draft). Cheaper budgets lean on FAL; premium prefers Higgsfield.
 const BUDGET_IMAGE_PREFERENCES: Record<OrchestraBudget, ImageProvider[]> = {
-  low: ['nanobanana', 'fal', 'stability', 'dalle'],
-  medium: ['fal', 'nanobanana', 'stability', 'dalle'],
-  premium: ['dalle', 'fal', 'nanobanana', 'stability'],
+  low: ['fal', 'higgsfield'],
+  medium: ['fal', 'higgsfield'],
+  premium: ['higgsfield', 'fal'],
 }
 
 const BUDGET_VIDEO_PREFERENCES: Record<OrchestraBudget, VideoProvider[]> = {
@@ -223,6 +230,8 @@ async function maybeEnhanceImage(
   // Skip enhancement for low budget
   if (budget === 'low') return undefined
 
+  // TODO(prune): replace with Higgsfield reframe/upscale/remove_bg once wired
+  // (capability-engine). Replicate kept for now — functional consumer. RESPEC §1.3/§5.3.
   const config = getConfig()
   if (!config.replicateApiToken) return undefined
 
@@ -411,6 +420,48 @@ export async function orchestrateContent(request: OrchestraRequest): Promise<Orc
     const imagePrompt = textResult?.platform_variants[platforms[0]]?.suggestedMedia
       || `Professional social media image for: ${brief}`
 
+    // U3: load Brand DNA (Soul ledger) and, when a Soul/brand-kit binding exists,
+    // generate the image through the capability engine (HF primary, on-brand by
+    // construction) instead of the budget loop. When NO binding exists the engine
+    // path is skipped entirely → the legacy budget loop below runs UNCHANGED
+    // (zero behavior change). userId is the owner scope for loadBrandDNA.
+    const dna = userId ? await loadBrandDNA(userId).catch(() => null) : null
+    const binding = brandDNAToCapabilityBinding(dna)
+    const hasBrandSoul = !!(binding && (binding.soulId || binding.brandKitStyleId))
+
+    if (hasBrandSoul) {
+      const startTime = Date.now()
+      try {
+        const capResult = await generateBrandImage({
+          prompt: imagePrompt,
+          aspectRatio: imageAspectRatio,
+          platform: platforms[0],
+          userId,
+          qualityTier: budget === 'premium' ? 'premium' : budget === 'low' ? 'draft' : 'standard',
+          brandDNA: binding,
+        })
+        const elapsedMs = Date.now() - startTime
+        if (capResult.url) {
+          const provider = capResult.provider
+          const cost = IMAGE_COSTS[provider] || 0.05
+          imageResult = { url: capResult.url, provider, enhanced: true, cost }
+          totalCost += cost
+          providerBreakdown.push({ provider, type: 'image', time_ms: elapsedMs, cost, success: true })
+          const imageQuality = validateImageQuality(capResult.url, platforms)
+          overallQualityScore += imageQuality.score
+          qualityChecks++
+          warnings.push(...imageQuality.warnings)
+          if (capResult.meta.degraded === 'no_soul') {
+            warnings.push('Brand image degraded (no_soul): identity not locked — generic on-brand fallback used')
+          }
+        } else if (capResult.meta.queued) {
+          warnings.push('Brand image queued (engine down) — will resolve async; no image this run')
+        }
+      } catch (err) {
+        warnings.push(`Brand-DNA image gen failed, falling back to budget loop: ${err instanceof Error ? err.message : err}`)
+      }
+    }
+
     // Get provider scores for potential A/B test override
     const imageScores = scoreImageProviders({ prompt: imagePrompt })
 
@@ -442,8 +493,11 @@ export async function orchestrateContent(request: OrchestraRequest): Promise<Orc
       ? [preferredProvider, ...BUDGET_IMAGE_PREFERENCES[budget].filter(p => p !== preferredProvider)]
       : BUDGET_IMAGE_PREFERENCES[budget]
 
-    let imageSuccess = false
-    for (const provider of providerOrder) {
+    // Legacy budget loop — runs only when the brand-DNA path above did NOT already
+    // produce an image (i.e. no Soul/brand-kit binding, or it queued). Preserves
+    // the exact prior selection/fallback behavior when no brand DNA is present.
+    let imageSuccess = !!imageResult
+    for (const provider of (imageResult ? [] : providerOrder)) {
       // Skip providers with high failure rates (> 50%)
       if (getFailureRate(provider, 'image') > 0.5) {
         warnings.push(`Skipping ${provider} for image — high failure rate`)
