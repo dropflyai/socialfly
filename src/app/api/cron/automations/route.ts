@@ -47,6 +47,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  // SAFETY GATE (incident 2026-06-19): autonomous content generation is OFF by
+  // default and only runs when explicitly enabled. Prevents silent auto-posting.
+  if (process.env.AUTOMATIONS_ENABLED !== 'true') {
+    return NextResponse.json({ disabled: true, message: 'Automations disabled (set AUTOMATIONS_ENABLED=true to enable)', processed: 0 })
+  }
+
   const supabase = getSupabase()
   const now = new Date()
 
