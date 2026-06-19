@@ -79,17 +79,13 @@ export default function AutomationsPage() {
   }
 
   async function approveDraft(postId: string) {
-    await fetch(`/api/posts/publish`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        postId,
-        action: 'approve',
-      }),
-    })
-    // Move from draft to scheduled
-    // For now, update directly via schedule API
-    await fetch(`/api/posts/schedule?id=${postId}&action=approve`, { method: 'PATCH' })
+    // Approve = human authorization to publish NOW (supervised). The approve
+    // route publishes immediately and reports per-platform results.
+    const res = await fetch(`/api/posts/schedule?id=${postId}&action=approve`, { method: 'PATCH' })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      alert(`Could not publish: ${data.error || res.statusText}`)
+    }
     fetchRules()
   }
 

@@ -190,7 +190,10 @@ async function executeAutomation(
   const userTone = (config.tone as string) || 'Professional'
   const mediaSource = (config.mediaSource as string) || (config.includeImages !== false ? 'ai' : 'none')
   const userMediaPool = (config.mediaPool as { id: string; url: string }[]) || []
-  const autoPublish = config.autoPublish !== false
+  // SUPERVISED BY DEFAULT (incident 2026-06-19): automations create DRAFTS for
+  // human review unless a rule EXPLICITLY opts into auto-publishing. (Was
+  // `!== false`, which auto-posted by default — the root cause of the incident.)
+  const autoPublish = config.autoPublish === true
   const contentExamples = (config.contentExamples as string) || ''
   const userIndustry = (config.industry as string) || ''
 
