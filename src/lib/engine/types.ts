@@ -450,6 +450,27 @@ export interface EngineConfig {
   // Circuit-breaker tuning (per-engine availability) — used by the capability engine.
   engineBreakerThreshold?: number  // consecutive transient failures to trip OPEN
   engineBreakerCooldownMs?: number // OPEN cooldown before half-open probe
+  // --- Virality / quality GATE (rung U4, additive, gated, DEFAULT-OFF) ---
+  // false (default) → ZERO behavior change: no gate runs, existing pipeline untouched.
+  // true → entry points that opt in run the predict-cheap → gate → generate-premium flow.
+  engineViralityGate?: boolean
+  // Pass threshold for scoreContent (0-1). Default 0.6. A draft scoring >= this passes.
+  engineViralityGateThreshold?: number
+  // --- Credit BUDGET CONTROL (additive, DEFAULT-SAFE) — the #1 margin risk (cost-runaway).
+  // The gate sits BEFORE any provider call in the capability engine: estimate → check →
+  // allow or BLOCK. When NOTHING below is configured (no cap, no kill-switch, no ceiling)
+  // behavior is byte-identical to today — generation is ALLOWED, only estimates are logged.
+  //
+  // Per-tenant DAILY credit cap (env ENGINE_DAILY_CREDIT_CAP). A tenant's summed
+  // hf_credits_spent for the UTC day + the next estimate must stay <= this. undefined =
+  // uncapped (today's behavior). A safe production value is tier-derived (see budget.ts).
+  engineDailyCreditCap?: number
+  // GLOBAL hard KILL-SWITCH (env ENGINE_GENERATION_KILL_SWITCH=true). Emergency stop:
+  // blocks ALL generation immediately, regardless of cap. Default false.
+  engineGenerationKillSwitch?: boolean
+  // Per-REQUEST max-credits ceiling (env ENGINE_MAX_CREDITS_PER_GEN). A single estimate
+  // above this is blocked outright (stops one absurd call). undefined = no per-call ceiling.
+  engineMaxCreditsPerGen?: number
   defaultImageProvider?: ImageProvider
   defaultVideoProvider?: VideoProvider
   instagramPageToken?: string
@@ -572,6 +593,16 @@ export interface GenerationMeta {
   gateSkipped?: boolean            // intelligence capability skipped (publish anyway)
   queued?: boolean                 // enqueued in generation_jobs, will resolve async
   jobId?: string                   // generation_jobs row id when queued/recorded
+  budgetBlocked?: boolean          // the credit-budget gate STOPPED this gen (no provider call, no cascade)
+  blockReason?: string             // why the budget gate blocked (kill_switch | per_request_ceiling | daily_cap)
+}
+
+/** Result of the credit-budget gate when it STOPS a generation (fail-safe degrade). */
+export interface BudgetBlockedResult {
+  blocked: true
+  reason: string                   // kill_switch | per_request_ceiling | daily_cap
+  estimatedCredits: number
+  message?: string
 }
 
 /** A concrete resolved plan: (engine, model, tool) + estimate. (§4.2) */
@@ -604,6 +635,63 @@ export interface CapabilityResult {
   meta: GenerationMeta
   /** raw analysis payload for intelligence capabilities (virality/video_analysis). */
   analysis?: Record<string, unknown>
+}
+
+// ============================================================================
+// Virality / Quality GATE (rung U4 — docs/01-CAPABILITY-ENGINE-RESPEC.md §4.5)
+//
+// Pre-publish gate that scores a piece of content against the Brand DNA. The
+// PRIMARY scorer is an LLM-judge (reliable, works for image OR video); the
+// ENHANCER is Higgsfield's virality_predictor (VIDEO only, best-effort). The
+// gate is RESILIENT: predictor down → judge alone gates; judge down (no
+// ANTHROPIC_API_KEY) → gate_skipped, publish is NOT blocked. (§4.4 fail-soft)
+// ============================================================================
+
+export type GateVerdict = 'pass' | 'revise' | 'reject'
+export type GateMediaType = 'image' | 'video'
+
+/** Output of a single scorer (judge or predictor). score 0-1. */
+export interface ScorerResult {
+  score: number                 // 0-1
+  reasons: string[]
+  /** present when this scorer could not run (and was skipped) — fail-soft trail. */
+  unavailable?: boolean
+}
+
+/** The merged gate score for one piece of content. */
+export interface GateScore {
+  score: number                 // 0-1 merged score (judge, blended with predictor when present)
+  verdict: GateVerdict
+  reasons: string[]
+  scorers: {
+    judge?: ScorerResult        // LLM-judge (primary)
+    predictor?: ScorerResult    // virality_predictor (video enhancer, best-effort)
+  }
+  /** true when a scorer failed-soft (e.g. judge unavailable → gate skipped). */
+  degraded?: boolean
+  /** set when the WHOLE gate was skipped (no judge available) — publish anyway. */
+  gateSkipped?: boolean
+}
+
+/** Input to scoreContent — the content + the brand context to score it against. */
+export interface ScoreContentInput {
+  media?: string                // url of the draft (image/video) — optional for text-only
+  mediaType: GateMediaType
+  prompt?: string               // the generation prompt / concept being scored
+  caption?: string              // platform caption (judged for hook strength)
+  brandDNA?: BrandDNA | null    // resolved brand DNA the content must fit
+  platform?: Platform
+}
+
+/** Brand context the gate judges against (subset of BrandDNA, mock-friendly). */
+export interface GateBrandContext {
+  brandName?: string
+  oneLiner?: string
+  voiceTone?: string[]
+  voiceDo?: string[]
+  voiceDont?: string[]
+  aesthetic?: string[]
+  avoid?: string[]
 }
 
 /** Static descriptor of an engine and the capabilities it supports. (§3.1) */

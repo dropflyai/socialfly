@@ -213,6 +213,133 @@ Write content that perfectly matches this brand voice. Be authentic and engaging
   return textBlock.text
 }
 
+// ============================================================================
+// LLM-JUDGE (rung U4) — the PRIMARY, reliable virality/quality scorer.
+//
+// Scores a piece of content (image OR video, by its prompt/concept/caption)
+// against a Brand DNA on four axes: brand-fit, anti-slop/quality, hook strength,
+// platform-fit. Returns {score 0-1, verdict, reasons[]}. This is the gate's
+// dependable baseline — it does NOT need Higgsfield's virality_predictor. It DOES
+// need an ANTHROPIC_API_KEY; when that is absent the gate's fail-soft ladder
+// skips the gate (it never blocks publish). See src/lib/engine/virality-gate.ts.
+// ============================================================================
+
+export interface JudgeVerdict {
+  score: number // 0-1
+  verdict: 'pass' | 'revise' | 'reject'
+  reasons: string[]
+  axes?: {
+    brandFit?: number
+    quality?: number
+    hookStrength?: number
+    platformFit?: number
+  }
+}
+
+export interface JudgeContentInput {
+  mediaType: 'image' | 'video'
+  prompt?: string
+  caption?: string
+  platform?: string
+  brand?: {
+    brandName?: string
+    oneLiner?: string
+    voiceTone?: string[]
+    voiceDo?: string[]
+    voiceDont?: string[]
+    aesthetic?: string[]
+    avoid?: string[]
+  }
+}
+
+/**
+ * Judge a content draft against the brand on brand-fit / anti-slop / hook /
+ * platform-fit. Pass `threshold` (0-1) so the model maps its 0-1 score to a
+ * pass|revise|reject verdict consistently. Throws on missing key / parse failure
+ * so the gate's fail-soft cascade can catch and skip (never block publish).
+ */
+export async function judgeContentAgainstBrand(
+  input: JudgeContentInput,
+  threshold = 0.6
+): Promise<JudgeVerdict> {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error('ANTHROPIC_API_KEY not configured (LLM-judge unavailable)')
+  }
+
+  const brand = input.brand ?? {}
+  const reviseFloor = Math.max(0, threshold - 0.2)
+  const systemPrompt = `You are a ruthless social-media creative director and brand guardian. You score a single piece of ${input.mediaType} content BEFORE it is published, against the brand's DNA. You are the anti-slop wall: generic, off-brand, or weak-hook content must NOT pass.
+
+Score on four axes (each 0-1) and combine into one overall score (0-1):
+1. brand-fit — does it match the brand voice/aesthetic and avoid banned terms/looks?
+2. quality (anti-slop) — is it distinctive and well-crafted, NOT generic AI filler?
+3. hook strength — would it stop the scroll in the first second?
+4. platform-fit — is it right for the target platform's format/norms?
+
+Map the overall score to a verdict using these thresholds:
+- score >= ${threshold.toFixed(2)} → "pass"
+- ${reviseFloor.toFixed(2)} <= score < ${threshold.toFixed(2)} → "revise" (salvageable; give concrete fixes)
+- score < ${reviseFloor.toFixed(2)} → "reject"
+
+Return ONLY valid JSON:
+{"score": 0.0-1.0, "verdict": "pass|revise|reject", "axes": {"brandFit":0-1,"quality":0-1,"hookStrength":0-1,"platformFit":0-1}, "reasons": ["specific reason 1", "..."]}`
+
+  const brandLines = [
+    brand.brandName ? `Brand: ${brand.brandName}` : '',
+    brand.oneLiner ? `One-liner: ${brand.oneLiner}` : '',
+    brand.voiceTone?.length ? `Voice tone: ${brand.voiceTone.join(', ')}` : '',
+    brand.voiceDo?.length ? `Voice DO: ${brand.voiceDo.join(', ')}` : '',
+    brand.voiceDont?.length ? `Voice DON'T: ${brand.voiceDont.join(', ')}` : '',
+    brand.aesthetic?.length ? `Aesthetic: ${brand.aesthetic.join(', ')}` : '',
+    brand.avoid?.length ? `Visual AVOID: ${brand.avoid.join(', ')}` : '',
+  ].filter(Boolean).join('\n')
+
+  const userPrompt = `Score this ${input.mediaType} draft for ${input.platform ?? 'social'}:
+
+Concept / generation prompt:
+${input.prompt ?? '(none provided)'}
+${input.caption ? `\nCaption:\n${input.caption}` : ''}
+
+${brandLines ? `Brand DNA to score against:\n${brandLines}` : 'No specific brand DNA — score on general quality/hook/platform-fit.'}
+
+Return the JSON verdict.`
+
+  const response = await anthropic.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 1024,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userPrompt }],
+  })
+
+  const textBlock = response.content.find((block) => block.type === 'text')
+  if (!textBlock || textBlock.type !== 'text') {
+    throw new Error('No text response from Claude judge')
+  }
+
+  let jsonStr = textBlock.text
+  const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)\s*```/)
+  if (jsonMatch) jsonStr = jsonMatch[1]
+
+  let parsed: JudgeVerdict
+  try {
+    parsed = JSON.parse(jsonStr) as JudgeVerdict
+  } catch {
+    throw new Error('Failed to parse LLM-judge response')
+  }
+
+  // Defensive normalization: clamp the score, derive verdict if missing/inconsistent.
+  const score = Math.max(0, Math.min(1, Number(parsed.score)))
+  const verdict: JudgeVerdict['verdict'] =
+    parsed.verdict ?? (score >= threshold ? 'pass' : score >= reviseFloor ? 'revise' : 'reject')
+
+  return {
+    score,
+    verdict,
+    reasons: Array.isArray(parsed.reasons) ? parsed.reasons : [],
+    axes: parsed.axes,
+  }
+}
+
 export async function repurposeContent(
   originalContent: string,
   sourcePlatform: string,

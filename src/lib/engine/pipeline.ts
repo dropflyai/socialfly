@@ -8,7 +8,9 @@
 import { generateContent, generateImage, enhanceImagePrompt } from './generate'
 import { publish, schedule } from './publish'
 import { loadBrandDNA, brandDNAToCapabilityBinding } from './brand'
-import { generateBrandImage } from './capability-engine'
+import { generateBrandImage, runCapability } from './capability-engine'
+import { gatedGenerate } from './virality-gate'
+import { getConfig } from './config'
 import { smartGenerateVideo } from './video-router'
 import type {
   GenerateAndPublishOptions,
@@ -117,13 +119,42 @@ export async function generateAndPublish(
       // Preserve the prior prompt-enhancement behavior (Claude) before generation.
       const finalPrompt = await enhanceImagePrompt(baseImagePrompt).catch(() => baseImagePrompt)
 
-      const capResult = await generateBrandImage({
-        prompt: finalPrompt,
-        aspectRatio: aspect,
-        platform: primaryPlatform,
-        userId,
-        brandDNA: binding,
-      })
+      // U4: OPTIONAL pre-publish virality/quality GATE (DEFAULT-OFF). When the
+      // engineViralityGate flag is enabled, route image gen through the two-phase
+      // predict-cheap → gate → generate-premium flow. When the flag is off (default)
+      // this branch is skipped entirely and behavior is byte-identical to U3.
+      let capResult: { url?: string; meta: import('./types').GenerationMeta } | undefined
+      if (getConfig().engineViralityGate) {
+        const capability = binding?.soulId ? 'persona_consistent_image' as const
+          : binding?.brandKitStyleId ? 'brand_kit_image' as const
+          : 'image_gen' as const
+        const gated = await gatedGenerate(
+          {
+            capability,
+            prompt: finalPrompt,
+            mediaType: 'image',
+            brandDNA: dna,
+            capabilityBrandDNA: binding,
+            platform: primaryPlatform,
+            aspectRatio: aspect,
+            userId,
+            premiumOnPass: true,
+          },
+          { generate: (r) => runCapability(r) },
+        ).catch(() => undefined)
+        if (gated?.result) capResult = gated.result
+      }
+      // Fall through to the normal (un-gated) brand image path when the gate is off
+      // OR produced no usable media (rejected/queued) — the pipeline always proceeds.
+      if (!capResult) {
+        capResult = await generateBrandImage({
+          prompt: finalPrompt,
+          aspectRatio: aspect,
+          platform: primaryPlatform,
+          userId,
+          brandDNA: binding,
+        })
+      }
 
       if (capResult.url) {
         image = { url: capResult.url, prompt: baseImagePrompt, enhancedPrompt: finalPrompt, meta: capResult.meta }

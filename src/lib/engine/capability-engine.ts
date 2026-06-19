@@ -40,6 +40,12 @@ import {
 import { smartGenerateAudio } from './audio-router'
 import { recordGenerationJob } from './brand'
 import type { SoulStorage } from './brand'
+import {
+  estimateCredits as estimateBudgetCredits,
+  checkBudget,
+  type DailySpendReader,
+  type BudgetDecision,
+} from './budget'
 import type {
   Capability,
   CapabilityRequest,
@@ -478,6 +484,12 @@ export interface ExecuteOptions {
   storage?: SoulStorage
   /** Skip the generation_jobs write (used by hermetic tests that don't assert it). */
   skipRecord?: boolean
+  /** Injected prior-spend reader for the budget gate (tests pass a controllable mock). */
+  spendReader?: DailySpendReader
+  /** Injected clock for the budget gate (tests pin the UTC day). */
+  now?: () => number
+  /** Per-tenant daily-cap override (tier-based caps later). */
+  dailyCapOverride?: number
 }
 
 /**
@@ -527,6 +539,35 @@ export async function executeWithCascade(
 
   const planEngine = resolution.engine
   const mediaGeneric = capability === 'image_gen' || capability === 'video_gen'
+
+  // ========================================================================
+  // CREDIT BUDGET GATE (rung B0) — sits BEFORE any provider dispatch.
+  // Estimate the plan's credits → kill-switch + per-request ceiling + per-tenant
+  // daily cap. On BLOCK: record a status='blocked' generation_jobs row (auditable)
+  // and return a typed blocked result. A budget block means STOP — it must NOT
+  // cascade to FAL. DEFAULT-SAFE: with nothing configured this ALWAYS allows
+  // (today's behavior) and only logs the estimate.
+  // ========================================================================
+  const estCredits = estimateBudgetCredits({
+    engine: planEngine,
+    capability,
+    model: resolution.model,
+    qualityTier: resolution.qualityTier,
+  })
+  const decision = await checkBudget(req.userId, estCredits, {
+    spendReader: opts.spendReader,
+    now: opts.now,
+    dailyCapOverride: opts.dailyCapOverride,
+  })
+  if (decision.blocked) {
+    return blockedResult(req, planEngine, decision, opts)
+  }
+  // Default-safe logging: surface the estimate even when allowed (auditable trail).
+  console.log(
+    `[capability-engine] budget OK: capability='${capability}' est=${estCredits}cr` +
+    `${decision.spentToday !== undefined ? ` spentToday=${decision.spentToday}cr` : ''}` +
+    `${decision.limit !== undefined ? ` cap=${decision.limit}cr` : ' (uncapped)'}`,
+  )
 
   // ZERO-BEHAVIOR-CHANGE legacy path: generic media when HF not opted-in.
   if (mediaGeneric && !higgsfieldEnabledForMedia()) {
@@ -602,6 +643,35 @@ export async function executeWithCascade(
 function degradeCapFor(capability: Capability): Capability {
   if (capability === 'persona_consistent_video') return 'video_gen'
   return 'image_gen'
+}
+
+/**
+ * Build + record the FAIL-SAFE result for a budget-blocked generation.
+ * Records an auditable generation_jobs row with status='blocked' + the reason, and
+ * returns a typed result the caller surfaces as a degrade/skip. NEVER cascades to FAL
+ * (a budget block means STOP, not reroute) and NEVER crashes the pipeline.
+ */
+async function blockedResult(
+  req: CapabilityRequest,
+  engine: EngineId,
+  decision: BudgetDecision,
+  opts: ExecuteOptions,
+): Promise<CapabilityResult> {
+  console.warn(
+    `[capability-engine] BUDGET BLOCK: capability='${req.capability}' reason='${decision.reason}' ` +
+    `est=${decision.estimatedCredits}cr — ${decision.message ?? 'blocked'} (NO provider call, NO cascade)`,
+  )
+  const meta: GenerationMeta = {
+    engine,
+    capability: req.capability,
+    creditsSpent: 0, // blocked → nothing actually spent
+    budgetBlocked: true,
+    blockReason: decision.reason,
+    degraded: 'over_budget',
+  }
+  const job = await record(req, meta, 'blocked', opts, decision.message)
+  if (job) meta.jobId = job
+  return { provider: engine, meta }
 }
 
 function errMsg(err: unknown): string {

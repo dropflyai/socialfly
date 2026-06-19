@@ -41,6 +41,22 @@ export function initEngine(config?: Partial<EngineConfig>): void {
       ?? (process.env.ENGINE_BREAKER_THRESHOLD ? Number(process.env.ENGINE_BREAKER_THRESHOLD) : undefined),
     engineBreakerCooldownMs: config?.engineBreakerCooldownMs
       ?? (process.env.ENGINE_BREAKER_COOLDOWN_MS ? Number(process.env.ENGINE_BREAKER_COOLDOWN_MS) : undefined),
+    // Virality/quality GATE (rung U4 — additive, DEFAULT-OFF). When false the gate
+    // never runs and the pipeline is byte-identical to today.
+    engineViralityGate: config?.engineViralityGate
+      ?? (process.env.ENGINE_VIRALITY_GATE === 'true'),
+    engineViralityGateThreshold: config?.engineViralityGateThreshold
+      ?? (process.env.ENGINE_VIRALITY_GATE_THRESHOLD ? Number(process.env.ENGINE_VIRALITY_GATE_THRESHOLD) : undefined),
+    // --- Credit BUDGET CONTROL (additive, DEFAULT-SAFE; the #1 margin risk) ---
+    // ENGINE_DAILY_CREDIT_CAP    → per-tenant UTC-daily credit cap (undefined = uncapped, today's behavior).
+    // ENGINE_GENERATION_KILL_SWITCH=true → emergency stop: blocks ALL generation (default false).
+    // ENGINE_MAX_CREDITS_PER_GEN → reject a single gen whose estimate exceeds this (undefined = none).
+    engineDailyCreditCap: config?.engineDailyCreditCap
+      ?? (process.env.ENGINE_DAILY_CREDIT_CAP ? Number(process.env.ENGINE_DAILY_CREDIT_CAP) : undefined),
+    engineGenerationKillSwitch: config?.engineGenerationKillSwitch
+      ?? (process.env.ENGINE_GENERATION_KILL_SWITCH === 'true'),
+    engineMaxCreditsPerGen: config?.engineMaxCreditsPerGen
+      ?? (process.env.ENGINE_MAX_CREDITS_PER_GEN ? Number(process.env.ENGINE_MAX_CREDITS_PER_GEN) : undefined),
     // PRUNE (E1): image provider enum narrowed to higgsfield/fal (others removed).
     defaultImageProvider: (config?.defaultImageProvider || process.env.DEFAULT_IMAGE_PROVIDER || 'auto') as 'auto' | 'higgsfield' | 'fal',
     defaultVideoProvider: (config?.defaultVideoProvider || process.env.DEFAULT_VIDEO_PROVIDER || 'auto') as 'auto' | 'seedance' | 'ltx' | 'minimax',
