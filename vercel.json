@@ -1,22 +1,4 @@
 {
-  "crons": [
-    {
-      "path": "/api/cron/publish",
-      "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/cron/engagement",
-      "schedule": "0 */6 * * *"
-    },
-    {
-      "path": "/api/cron/automations",
-      "schedule": "0 */1 * * *"
-    },
-    {
-      "path": "/api/cron/growth",
-      "schedule": "0 6 * * *"
-    }
-  ],
   "functions": {
     "src/app/api/video/generate/route.ts": {
       "maxDuration": 300
