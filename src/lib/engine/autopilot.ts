@@ -444,7 +444,7 @@ export async function generateWeeklyDigest(
   }
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 2048,
     system: `You are a marketing strategist analyzing weekly social media performance.
 ${brandContext ? `\n${brandContext}\n` : ''}

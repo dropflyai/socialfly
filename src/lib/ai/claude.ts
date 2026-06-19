@@ -142,7 +142,7 @@ ${content.slice(0, 15000)}
 Extract the brand voice, target audience, content pillars, and visual style. Be specific and base your analysis on actual content patterns you observe.`
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 4096,
     messages: [
       {
@@ -194,7 +194,7 @@ Content Type: ${contentType}
 Write content that perfectly matches this brand voice. Be authentic and engaging.`
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 1024,
     messages: [
       {
@@ -305,7 +305,7 @@ ${brandLines ? `Brand DNA to score against:\n${brandLines}` : 'No specific brand
 Return the JSON verdict.`
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 1024,
     system: systemPrompt,
     messages: [{ role: 'user', content: userPrompt }],
@@ -370,7 +370,7 @@ Target Platform: ${targetPlatform}
 Transform the content to fit the target platform perfectly while keeping the core message.`
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 1024,
     messages: [
       {

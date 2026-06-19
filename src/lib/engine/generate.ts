@@ -96,7 +96,7 @@ Return valid JSON with this structure:
 }`
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 2048,
     system: systemPrompt,
     messages: [{ role: 'user', content: topic }],
@@ -172,7 +172,7 @@ ${context?.platform === 'instagram' ? '- Optimize for Instagram: vibrant, clean,
 ${context?.brand ? `- Brand style: ${context.brand.tone}, ${context.brand.industry || 'modern'}` : ''}`
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 300,
     system: systemPrompt,
     messages: [{

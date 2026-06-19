@@ -119,7 +119,7 @@ export const ENGINE_REGISTRY: Record<EngineId, EngineDescriptor> = {
     availabilityRisk: 'low',
     healthKey: 'anthropic',
     supports: ['text_gen'],
-    models: { text_gen: 'claude-sonnet-4-20250514' },
+    models: { text_gen: 'claude-sonnet-4-6' },
   },
   openai: {
     id: 'openai',

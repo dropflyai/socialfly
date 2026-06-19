@@ -275,7 +275,7 @@ DO NOT write the generation prompt. Capture the SCENE. Our engine writes the pro
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 800,
       system: systemPrompt,
       messages: messages.map(m => ({ role: m.role, content: m.content })),

@@ -124,7 +124,7 @@ Return valid JSON:
 }`
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 4096,
     system: systemPrompt,
     messages: [{
@@ -171,7 +171,7 @@ export async function fetchTodayAINews(
   const today = new Date().toISOString().split('T')[0]
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 2048,
     system: `You are an AI news researcher. Generate ${maxItems} real, current, plausible AI news headlines and summaries that would be relevant for a business audience as of ${today}. Focus on practical business applications of AI, major model releases, industry partnerships, and regulatory developments.
 
@@ -310,7 +310,7 @@ export async function transformNewsletterText(
   }
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 2048,
     system: `Extract the top news items from this newsletter and return valid JSON:
 {
