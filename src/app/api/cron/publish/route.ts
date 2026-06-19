@@ -11,6 +11,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  // SAFETY GATE (incident 2026-06-19): autonomous publishing is OFF by default
+  // and only runs when explicitly enabled. Prevents silent auto-posting to socials.
+  if (process.env.AUTOMATIONS_ENABLED !== 'true') {
+    return NextResponse.json({ disabled: true, message: 'Publishing disabled (set AUTOMATIONS_ENABLED=true to enable)', processed: 0 })
+  }
+
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
