@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 import { deductCredits } from '@/lib/credits'
+// TODO(prune): replace with Higgsfield reframe/upscale/remove_bg tools once wired
+// (capability-engine). Replicate kept for now — functional consumer. RESPEC §1.3/§5.3.
 import {
   removeBackground,
   upscaleImage,

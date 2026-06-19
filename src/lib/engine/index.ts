@@ -38,6 +38,14 @@ export { publish, schedule, listScheduled, cancelScheduled, getPostHistory } fro
 
 // Brand Voice
 export { loadBrandVoice, buildBrandContext } from './brand'
+// Brand-DNA Soul Ledger (rung U2)
+export {
+  loadBrandDNA,
+  upsertBrandDNA,
+  recordGenerationJob,
+  recordSoulMemory,
+} from './brand'
+export type { SoulStorage, SoulStorageQuery } from './brand'
 
 // Analytics
 export { getAnalytics, getPerformanceSummary, storePostMetrics } from './analytics'
@@ -117,6 +125,8 @@ export {
 } from './audio-router'
 
 // Replicate Tools (background removal, upscaling, style transfer, face swap)
+// TODO(prune): replace with Higgsfield reframe/upscale/remove_bg tools once wired
+// (capability-engine). Replicate kept for now — functional consumers. RESPEC §1.3/§5.3.
 export {
   removeBackground,
   upscaleImage,
@@ -194,6 +204,19 @@ export type {
   ProviderPerformanceRecord,
   ProviderPerformanceReport,
   SpendReport,
+  // Brand-DNA Soul Ledger (rung U2)
+  BrandDNA,
+  BrandDNAVoice,
+  BrandDNAVisual,
+  BrandDNAPlatformPolicy,
+  BrandDNAHiggsfieldBinding,
+  UpsertBrandDNAInput,
+  GenerationJob,
+  GenerationJobMediaType,
+  RecordGenerationJobInput,
+  SoulMemoryRow,
+  SoulMemoryMetrics,
+  RecordSoulMemoryInput,
 } from './types'
 
 export type { PipelineResult } from './pipeline'

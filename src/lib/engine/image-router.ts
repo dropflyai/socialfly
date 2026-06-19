@@ -7,18 +7,21 @@
  * - Performance history
  *
  * Providers:
- * - FAL.ai (Flux) — Best for artistic/stylized images, fast, reliable
- * - Nano Banana (Google Gemini) — Best for text-in-images, editing, 4K, character consistency
- * - DALL-E 3 (OpenAI) — Excels at photorealism, creative concepts, following complex prompts
- * - Stability AI (SD 3.5) — Best for consistent style, architectural/product shots, fine detail, cost-effective
+ * - Higgsfield — PRIMARY engine (gated on key); full media surface (U0)
+ * - FAL.ai (Flux) — fallback + commodity-draft lane; fast, reliable
  *
  * The router scores each provider per request and picks the winner.
+ *
+ * PRUNE (rung E1, docs/01-CAPABILITY-ENGINE-RESPEC.md §1.3): the standalone
+ * Stability / DALL-E / Nano-Banana image lanes were removed — Higgsfield now
+ * natively covers those models (seedream/gpt_image/nano_banana_pro). Verified
+ * ZERO external callers before removal. OpenAI/Gemini keys remain for TEXT only.
  */
 
 import { fal } from '@fal-ai/client'
 import { GoogleGenAI } from '@google/genai'
-import OpenAI from 'openai'
-import { getConfig, getSupabase } from './config'
+import { getConfig } from './config'
+import { higgsfieldGenerateImage } from './providers/higgsfield'
 import type { GeneratedImage, GenerateImageOptions, ImageProvider, ImageProviderScore } from './types'
 
 // ============================================================================
@@ -36,7 +39,19 @@ interface ProviderCapabilities {
   costEfficiency: number   // 0-10: How cheap?
 }
 
-const PROVIDER_CAPABILITIES: Record<'fal' | 'nanobanana' | 'dalle' | 'stability', ProviderCapabilities> = {
+// PRUNE (E1): nanobanana/dalle/stability rows removed — Higgsfield covers those
+// models natively. Matrix is now PRIMARY(higgsfield) + FALLBACK(fal) only.
+const PROVIDER_CAPABILITIES: Record<'higgsfield' | 'fal', ProviderCapabilities> = {
+  higgsfield: {
+    textInImage: 9,          // gpt_image-grade text rendering on the Higgsfield zoo
+    artisticStyle: 9,        // soul_2 / seedream / flux_2 — broad stylistic range
+    photoRealism: 9,         // seedream/soul photorealism
+    maxResolution: 3840,     // up to 4K (seedream)
+    imageEditing: true,      // flux_2 kontext editing/style-transfer
+    characterConsistency: true,  // soul_2 / soul_cast identity (load-bearing for U2)
+    speed: 6,                // async submit→poll
+    costEfficiency: 5,       // workspace-credit metered
+  },
   fal: {
     textInImage: 2,          // Flux is weak at text rendering
     artisticStyle: 9,        // Excellent for creative/artistic images
@@ -46,36 +61,6 @@ const PROVIDER_CAPABILITIES: Record<'fal' | 'nanobanana' | 'dalle' | 'stability'
     characterConsistency: false,
     speed: 9,                // Very fast
     costEfficiency: 6,       // Pay per image
-  },
-  nanobanana: {
-    textInImage: 9,          // Excellent text rendering
-    artisticStyle: 7,        // Good but not as stylized as Flux
-    photoRealism: 9,         // Excellent photorealism
-    maxResolution: 3840,     // Up to 4K
-    imageEditing: true,      // Full natural language editing
-    characterConsistency: true, // Up to 5 characters, 14 objects
-    speed: 7,                // Good but slightly slower than Flux
-    costEfficiency: 9,       // Free tier available
-  },
-  dalle: {
-    textInImage: 5,          // Decent text rendering, better than Flux
-    artisticStyle: 8,        // Strong creative/artistic capabilities
-    photoRealism: 9,         // Excellent photorealism
-    maxResolution: 1792,     // 1024x1024, 1024x1792, 1792x1024
-    imageEditing: false,     // No editing via this API
-    characterConsistency: false,
-    speed: 7,                // Moderate speed
-    costEfficiency: 5,       // Higher cost per image
-  },
-  stability: {
-    textInImage: 3,          // Limited text rendering
-    artisticStyle: 8,        // Strong consistent style output
-    photoRealism: 8,         // Good photorealism
-    maxResolution: 1536,     // Up to 1536px (various aspect ratios)
-    imageEditing: false,     // No editing via SD3 endpoint
-    characterConsistency: false,
-    speed: 7,                // Moderate speed
-    costEfficiency: 8,       // Cost-effective for high volume
   },
 }
 
@@ -100,11 +85,40 @@ interface RouteRequest {
  */
 export function scoreProviders(request: RouteRequest): ImageProviderScore[] {
   const config = getConfig()
-  const hasGemini = !!config.geminiApiKey
   const hasFal = !!config.falApiKey
-  const hasOpenAI = !!config.openaiApiKey
 
   const scores: ImageProviderScore[] = []
+
+  // Score Higgsfield (additive — only scored when the key is configured, so when
+  // HIGGSFIELD_API_KEY is absent it never enters the ranking and selection is unchanged).
+  const hasHiggsfield = !!config.higgsfieldApiKey
+  if (hasHiggsfield) {
+    // Baseline preference bump so Higgsfield wins ties when configured as primary.
+    let score = 65
+    const reasons: string[] = ['Higgsfield configured, primary-engine bump (+65 base)']
+
+    if (request.needsTextOverlay) {
+      score += 20
+      reasons.push('Higgsfield strong at text-in-image (+20)')
+    }
+
+    if (request.needsEditing) {
+      score += 20
+      reasons.push('Higgsfield supports editing via flux_2 kontext (+20)')
+    }
+
+    if (request.needsHighRes) {
+      score += 10
+      reasons.push('Higgsfield supports up to 4K (+10)')
+    }
+
+    if (request.needsConsistency) {
+      score += 30
+      reasons.push('Higgsfield soul_2/soul_cast character consistency (+30)')
+    }
+
+    scores.push({ provider: 'higgsfield', score: Math.max(0, score), reasons })
+  }
 
   // Score FAL.ai
   if (hasFal) {
@@ -151,200 +165,6 @@ export function scoreProviders(request: RouteRequest): ImageProviderScore[] {
     scores.push({ provider: 'fal', score: Math.max(0, score), reasons })
   }
 
-  // Score Nano Banana
-  if (hasGemini) {
-    let score = 50 // Base score
-    const reasons: string[] = []
-
-    if (request.needsTextOverlay) {
-      score += 30
-      reasons.push('Nano Banana excels at text-in-image (+30)')
-    }
-
-    if (request.needsEditing) {
-      score += 40
-      reasons.push('Nano Banana supports image editing (+40)')
-    }
-
-    if (request.needsHighRes) {
-      score += 15
-      reasons.push('Nano Banana supports up to 4K (+15)')
-    }
-
-    if (request.needsConsistency) {
-      score += 25
-      reasons.push('Nano Banana character consistency (+25)')
-    }
-
-    // Check for text-in-image
-    const textKeywords = ['text saying', 'with text', 'with the words', 'caption', 'headline', 'banner', 'sign that says', 'logo text', 'quote']
-    if (textKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
-      score += 25
-      reasons.push('Text rendering detected, Nano Banana excels (+25)')
-    }
-
-    // Check for product/marketing content (Nano Banana has web grounding)
-    const marketingKeywords = ['product', 'brand', 'marketing', 'social media', 'professional', 'business', 'mockup']
-    if (marketingKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
-      score += 10
-      reasons.push('Marketing content, Nano Banana web-grounded (+10)')
-    }
-
-    // Artistic styles slightly favor FAL
-    const artisticKeywords = ['artistic', 'illustration', 'painting', 'watercolor', 'abstract', 'surreal', 'fantasy', 'anime', 'cartoon']
-    if (artisticKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
-      score -= 10
-      reasons.push('Artistic style, slightly less stylized than FAL (-10)')
-    }
-
-    if (request.existingImageUrl || request.referenceImages?.length) {
-      score += 20
-      reasons.push('Reference/edit images provided, Nano Banana handles (+20)')
-    }
-
-    scores.push({ provider: 'nanobanana', score: Math.max(0, score), reasons })
-  }
-
-  // Score DALL-E 3
-  if (hasOpenAI) {
-    let score = 45 // Slightly lower base — it's a tertiary option
-    const reasons: string[] = []
-
-    if (request.needsTextOverlay) {
-      score -= 10
-      reasons.push('DALL-E decent but not best at text-in-image (-10)')
-    }
-
-    if (request.needsEditing) {
-      score -= 50
-      reasons.push('DALL-E 3 does not support image editing (-50)')
-    }
-
-    if (request.needsHighRes) {
-      score -= 5
-      reasons.push('DALL-E max 1792px (-5)')
-    }
-
-    if (request.needsConsistency) {
-      score -= 20
-      reasons.push('DALL-E has no character consistency (-20)')
-    }
-
-    // DALL-E excels at photorealism
-    const photoKeywords = ['photo', 'photograph', 'photorealistic', 'realistic', 'real life', 'cinematic', 'portrait', 'headshot']
-    if (photoKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
-      score += 20
-      reasons.push('Photorealistic content detected, DALL-E excels (+20)')
-    }
-
-    // DALL-E excels at creative concepts and complex prompts
-    const creativeKeywords = ['concept art', 'creative', 'imaginative', 'unique', 'original', 'innovative', 'futuristic', 'sci-fi', 'dystopian']
-    if (creativeKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
-      score += 15
-      reasons.push('Creative concept detected, DALL-E handles complex prompts well (+15)')
-    }
-
-    // DALL-E is good at following detailed/complex prompts
-    if (request.prompt.length > 200) {
-      score += 10
-      reasons.push('Complex prompt detected, DALL-E follows detailed instructions well (+10)')
-    }
-
-    // Artistic styles — DALL-E is solid but FAL still leads
-    const artisticKeywords = ['artistic', 'illustration', 'painting', 'watercolor', 'abstract', 'surreal', 'fantasy', 'anime', 'cartoon']
-    if (artisticKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
-      score += 5
-      reasons.push('Artistic style, DALL-E is capable (+5)')
-    }
-
-    // Check for text-in-image — DALL-E is middling
-    const textKeywords = ['text saying', 'with text', 'with the words', 'caption', 'headline', 'banner', 'sign that says', 'logo text', 'quote']
-    if (textKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
-      score -= 10
-      reasons.push('Text rendering detected, DALL-E middling (-10)')
-    }
-
-    scores.push({ provider: 'dalle', score: Math.max(0, score), reasons })
-  }
-
-  // Score Stability AI
-  const hasStability = !!config.stabilityApiKey
-  if (hasStability) {
-    let score = 48 // Moderate base score
-    const reasons: string[] = []
-
-    if (request.needsTextOverlay) {
-      score -= 25
-      reasons.push('Stability weak at text-in-image (-25)')
-    }
-
-    if (request.needsEditing) {
-      score -= 50
-      reasons.push('Stability SD3 does not support image editing (-50)')
-    }
-
-    if (request.needsHighRes) {
-      score -= 10
-      reasons.push('Stability max 1536px (-10)')
-    }
-
-    if (request.needsConsistency) {
-      score -= 20
-      reasons.push('Stability has no character consistency (-20)')
-    }
-
-    // Stability excels at product photography and architectural shots
-    const productKeywords = ['product', 'product photography', 'product shot', 'e-commerce', 'catalog', 'merchandise', 'packaging', 'bottle', 'device', 'gadget']
-    if (productKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
-      score += 25
-      reasons.push('Product photography detected, Stability excels (+25)')
-    }
-
-    // Stability excels at architectural/interior shots
-    const architectureKeywords = ['architecture', 'architectural', 'building', 'interior', 'exterior', 'room', 'house', 'office space', 'real estate', 'property', 'facade']
-    if (architectureKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
-      score += 20
-      reasons.push('Architectural content detected, Stability excels (+20)')
-    }
-
-    // Stability is great for consistent branding and style
-    const brandingKeywords = ['brand', 'branding', 'consistent', 'style guide', 'on-brand', 'brand identity', 'corporate', 'uniform style']
-    if (brandingKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
-      score += 20
-      reasons.push('Consistent branding detected, Stability excels (+20)')
-    }
-
-    // Stability handles fine detail work well
-    const detailKeywords = ['detailed', 'fine detail', 'intricate', 'precision', 'high detail', 'texture', 'close-up', 'macro', 'crisp']
-    if (detailKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
-      score += 15
-      reasons.push('Fine detail work detected, Stability handles well (+15)')
-    }
-
-    // Cost-effective for volume work
-    const volumeKeywords = ['batch', 'series', 'collection', 'set of', 'multiple', 'variations']
-    if (volumeKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
-      score += 10
-      reasons.push('Volume content, Stability is cost-effective (+10)')
-    }
-
-    // Check for text-in-image — Stability is weak
-    const textKeywords = ['text saying', 'with text', 'with the words', 'caption', 'headline', 'banner', 'sign that says', 'logo text', 'quote']
-    if (textKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
-      score -= 15
-      reasons.push('Text rendering detected, Stability weak (-15)')
-    }
-
-    // Artistic styles — Stability is solid but FAL leads
-    const artisticKeywords = ['artistic', 'illustration', 'painting', 'watercolor', 'abstract', 'surreal', 'fantasy', 'anime', 'cartoon']
-    if (artisticKeywords.some(kw => request.prompt.toLowerCase().includes(kw))) {
-      score += 5
-      reasons.push('Artistic style, Stability is capable (+5)')
-    }
-
-    scores.push({ provider: 'stability', score: Math.max(0, score), reasons })
-  }
-
   // Sort by score descending
   scores.sort((a, b) => b.score - a.score)
 
@@ -354,17 +174,17 @@ export function scoreProviders(request: RouteRequest): ImageProviderScore[] {
 /**
  * Pick the best provider for a request.
  */
-export function pickProvider(request: RouteRequest): 'fal' | 'nanobanana' | 'dalle' | 'stability' {
+export function pickProvider(request: RouteRequest): 'higgsfield' | 'fal' {
   const config = getConfig()
 
-  // If user explicitly chose a provider
+  // If user explicitly chose a provider (post-prune: only higgsfield/fal selectable)
   if (request.preferredProvider && request.preferredProvider !== 'auto') {
-    return request.preferredProvider as 'fal' | 'nanobanana' | 'dalle' | 'stability'
+    return request.preferredProvider as 'higgsfield' | 'fal'
   }
 
   // If config has a non-auto default
   if (config.defaultImageProvider && config.defaultImageProvider !== 'auto') {
-    return config.defaultImageProvider as 'fal' | 'nanobanana' | 'dalle' | 'stability'
+    return config.defaultImageProvider as 'higgsfield' | 'fal'
   }
 
   // Smart routing
@@ -374,7 +194,7 @@ export function pickProvider(request: RouteRequest): 'fal' | 'nanobanana' | 'dal
     return 'fal' // Fallback
   }
 
-  return scores[0].provider as 'fal' | 'nanobanana' | 'dalle' | 'stability'
+  return scores[0].provider as 'higgsfield' | 'fal'
 }
 
 // ============================================================================
@@ -415,48 +235,12 @@ async function generateWithFal(
 }
 
 /**
- * Generate image via Nano Banana (Google Gemini).
- */
-async function generateWithNanoBanana(
-  prompt: string,
-  aspectRatio: string = '1:1'
-): Promise<GeneratedImage> {
-  const config = getConfig()
-  if (!config.geminiApiKey) throw new Error('GEMINI_API_KEY not configured')
-
-  const genai = new GoogleGenAI({ apiKey: config.geminiApiKey })
-
-  const response = await genai.models.generateContent({
-    model: 'gemini-2.5-flash-image',
-    contents: [{
-      role: 'user',
-      parts: [{ text: prompt }],
-    }],
-    config: {
-      responseModalities: ['Text', 'Image'],
-    },
-  })
-
-  // Extract image from response
-  const parts = response.candidates?.[0]?.content?.parts
-  if (!parts) throw new Error('No response from Nano Banana')
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const imagePart = parts.find((p: any) => p.inlineData?.mimeType?.startsWith('image/'))
-  if (!imagePart?.inlineData) throw new Error('No image generated by Nano Banana')
-
-  // Convert base64 to a data URL (for immediate use) or upload to storage
-  const dataUrl = `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`
-
-  return {
-    url: dataUrl,
-    prompt,
-    enhancedPrompt: prompt,
-  }
-}
-
-/**
- * Edit an existing image via Nano Banana.
+ * Edit an existing image via Nano Banana (Gemini).
+ *
+ * KEPT post-prune (E1): this powers smartEditImage, which has an EXTERNAL caller
+ * (src/app/api/image/edit/route.ts). The standalone nano-banana GENERATION lane
+ * was pruned, but the EDIT primary stays until the Higgsfield flux_2-kontext edit
+ * lane is wired (later rung). See docs/01-CAPABILITY-ENGINE-RESPEC.md §1.3 item 4.
  */
 async function editWithNanoBanana(
   imageUrl: string,
@@ -518,117 +302,6 @@ async function editWithNanoBanana(
   }
 }
 
-/**
- * Generate image via DALL-E 3 (OpenAI).
- */
-async function generateWithDalle(
-  prompt: string,
-  aspectRatio: string = '1:1'
-): Promise<GeneratedImage> {
-  const config = getConfig()
-  if (!config.openaiApiKey) throw new Error('OPENAI_API_KEY not configured')
-
-  const openai = new OpenAI({ apiKey: config.openaiApiKey })
-
-  // Map aspect ratios to DALL-E 3 supported sizes
-  const size: '1024x1024' | '1024x1792' | '1792x1024' =
-    aspectRatio === '4:5' || aspectRatio === '9:16' ? '1024x1792'
-    : aspectRatio === '16:9' ? '1792x1024'
-    : '1024x1024'
-
-  const response = await openai.images.generate({
-    model: 'dall-e-3',
-    prompt,
-    size,
-    quality: 'hd',
-    n: 1,
-  })
-
-  const imageData = response.data?.[0]
-  if (!imageData?.url) throw new Error('No image generated by DALL-E 3')
-
-  return {
-    url: imageData.url,
-    prompt,
-    enhancedPrompt: imageData.revised_prompt || prompt,
-  }
-}
-
-/**
- * Generate image via Stability AI (Stable Diffusion 3.5).
- * Uses the REST API directly with fetch() — no SDK required.
- */
-async function generateWithStability(
-  prompt: string,
-  aspectRatio: string = '1:1'
-): Promise<GeneratedImage> {
-  const config = getConfig()
-  if (!config.stabilityApiKey) throw new Error('STABILITY_API_KEY not configured')
-
-  // Map aspect ratios to Stability AI supported values
-  const stabilityAspectRatio =
-    aspectRatio === '4:5' ? '4:5'
-    : aspectRatio === '9:16' ? '9:16'
-    : aspectRatio === '16:9' ? '16:9'
-    : '1:1'
-
-  const formData = new FormData()
-  formData.append('prompt', prompt)
-  formData.append('model', 'sd3.5-large')
-  formData.append('aspect_ratio', stabilityAspectRatio)
-  formData.append('output_format', 'png')
-
-  // Add a negative prompt for quality control
-  formData.append('negative_prompt', 'blurry, low quality, distorted, deformed, ugly, bad anatomy, watermark, text overlay')
-
-  const response = await fetch('https://api.stability.ai/v2beta/stable-image/generate/sd3', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${config.stabilityApiKey}`,
-      'Accept': 'image/*',
-    },
-    body: formData,
-  })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`Stability AI API error (${response.status}): ${errorText}`)
-  }
-
-  // Response is raw image bytes
-  const imageBuffer = Buffer.from(await response.arrayBuffer())
-
-  if (imageBuffer.length < 100) {
-    throw new Error('Stability AI returned an empty or invalid image')
-  }
-
-  // Upload to Supabase storage
-  const supabase = getSupabase()
-  const timestamp = Date.now()
-  const filePath = `stability/${timestamp}.png`
-
-  const { error: uploadError } = await supabase.storage
-    .from('media')
-    .upload(filePath, imageBuffer, {
-      contentType: 'image/png',
-      upsert: false,
-    })
-
-  if (uploadError) {
-    throw new Error(`Failed to upload Stability image to storage: ${uploadError.message}`)
-  }
-
-  const { data: urlData } = supabase.storage
-    .from('media')
-    .getPublicUrl(filePath)
-
-  return {
-    url: urlData.publicUrl,
-    prompt,
-    enhancedPrompt: prompt,
-  }
-}
-
 // ============================================================================
 // Public API
 // ============================================================================
@@ -660,12 +333,9 @@ export async function smartGenerateImage(
 
   let result: GeneratedImage
 
-  if (provider === 'stability') {
-    result = await generateWithStability(prompt, aspectRatio)
-  } else if (provider === 'dalle') {
-    result = await generateWithDalle(prompt, aspectRatio)
-  } else if (provider === 'nanobanana') {
-    result = await generateWithNanoBanana(prompt, aspectRatio)
+  // Post-prune (E1): only higgsfield (primary) + fal (fallback) are selectable.
+  if (provider === 'higgsfield') {
+    result = await higgsfieldGenerateImage(prompt, aspectRatio)
   } else {
     result = await generateWithFal(prompt, aspectRatio)
   }

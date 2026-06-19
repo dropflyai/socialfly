@@ -561,13 +561,32 @@ Return valid JSON:
       }
       const optimizedPrompt = buildFullPrompt(imageBrief, 'fal')
 
-      const { fal } = await import('@fal-ai/client')
-      fal.config({ credentials: process.env.FAL_KEY })
-      const imgResult = await fal.subscribe('fal-ai/flux/schnell', {
-        input: { prompt: optimizedPrompt.prompt, image_size: { width: 1080, height: 1080 }, num_images: 1 },
+      // U3b: this inline FAL gen previously BYPASSED the routers entirely
+      // (raw fal.subscribe). Re-point it through the capability engine so the
+      // automation engine inherits Higgsfield-primary + Brand-DNA injection — the
+      // same path autopilot's generateAndPublish already uses. Load the tenant's
+      // Brand DNA (the four hf_* bindings) and pass it into generateBrandImage,
+      // which resolves persona_consistent / brand_kit / image_gen by what's bound.
+      //
+      // ZERO-BEHAVIOR-CHANGE: with no brand_souls row AND no HF key + media engine
+      // unset, generateBrandImage → runCapability resolves to the UNCHANGED legacy
+      // FAL lane (smartGenerateImage), so this keeps generating on FAL byte-for-byte
+      // as before. When a Soul/key IS present, it generates on-brand on Higgsfield.
+      const { loadBrandDNA, brandDNAToCapabilityBinding } = await import('@/lib/engine/brand')
+      const { generateBrandImage } = await import('@/lib/engine/capability-engine')
+
+      const dna = await loadBrandDNA(rule.user_id).catch(() => null)
+      const binding = brandDNAToCapabilityBinding(dna)
+
+      const aspect = (platforms[0] === 'instagram' || platforms[0] === 'tiktok') ? '9:16' : '1:1'
+      const capResult = await generateBrandImage({
+        prompt: optimizedPrompt.prompt,
+        aspectRatio: aspect,
+        platform: platforms[0] as import('@/lib/engine/types').Platform,
+        userId: rule.user_id,
+        brandDNA: binding,
       })
-      const images = (imgResult.data as { images?: { url: string }[] }).images
-      if (images?.[0]?.url) imageUrl = images[0].url
+      if (capResult.url) imageUrl = capResult.url
     } catch (imgErr) {
       console.error('Automation image generation failed:', imgErr)
     }
