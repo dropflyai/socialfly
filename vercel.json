@@ -1,4 +1,7 @@
 {
+  "crons": [
+    { "path": "/api/cron/automations", "schedule": "0 */1 * * *" }
+  ],
   "functions": {
     "src/app/api/video/generate/route.ts": {
       "maxDuration": 300
