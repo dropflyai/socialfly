@@ -38,6 +38,7 @@ export function Header({ className }: HeaderProps) {
   const { setMobileMenuOpen } = useUIStore()
   const [user, setUser] = useState<{ email?: string; name?: string } | null>(null)
   const [creditsRemaining, setCreditsRemaining] = useState<number>(0)
+  const [pendingCount, setPendingCount] = useState<number>(0)
 
   useEffect(() => {
     const getUser = async () => {
@@ -53,6 +54,14 @@ export function Header({ className }: HeaderProps) {
         if (res.ok) {
           const data = await res.json()
           setCreditsRemaining(data.remaining ?? 0)
+        }
+
+        // Pending review count for the notification bell
+        const dr = await fetch('/api/posts/schedule?status=draft')
+        if (dr.ok) {
+          const d = await dr.json()
+          const drafts = (d.posts || []) as { custom_content?: { automation_type?: string } }[]
+          setPendingCount(drafts.filter((p) => p.custom_content?.automation_type).length)
         }
       }
     }
@@ -117,15 +126,23 @@ export function Header({ className }: HeaderProps) {
           <span className="hidden sm:inline">Create</span>
         </Button>
 
-        {/* Notifications */}
-        <Button variant="ghost" size="icon" className="relative">
+        {/* Notifications — pending posts awaiting review */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative"
+          onClick={() => router.push('/automations')}
+          title={pendingCount > 0 ? `${pendingCount} posts pending review` : 'No posts pending review'}
+        >
           <Bell className="h-5 w-5" />
-          <Badge
-            variant="destructive"
-            className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-[10px]"
-          >
-            3
-          </Badge>
+          {pendingCount > 0 && (
+            <Badge
+              variant="destructive"
+              className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-[10px]"
+            >
+              {pendingCount > 99 ? '99+' : pendingCount}
+            </Badge>
+          )}
         </Button>
 
         {/* User Menu */}
